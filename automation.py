@@ -137,9 +137,20 @@ def _login(page, email, password):
         )
 
     page.locator('input[type="password"]').first.fill(password)
-    page.locator('button[type="submit"]').first.click()
+    page.wait_for_timeout(500)
+    # Try submit button, then Next nav button (Ionic portals use nav-style submit)
     try:
-        page.wait_for_url("**/scaq/dashboard**", timeout=30000)
+        page.locator('button[type="submit"]').first.click()
+    except Exception:
+        try:
+            page.get_by_role("button", name=re.compile(r"next|sign.in|log.in|submit", re.IGNORECASE)).first.click()
+        except Exception:
+            page.locator('button, ion-button').filter(has_text=re.compile(r"next|sign.in|log.in", re.IGNORECASE)).first.click()
+    try:
+        page.wait_for_url("**/scaq/**", timeout=30000)
+        # Make sure we're not still on the login page
+        if "/login" in page.url:
+            raise PlaywrightTimeout("Still on login page")
     except PlaywrightTimeout:
         raise Exception("Login failed — double-check your email and password.")
 
