@@ -67,11 +67,18 @@ def _login(page, email, password):
         page.wait_for_timeout(1500)
     except Exception:
         try:
-            page.locator('button, ion-button').filter(has_text=re.compile("click to begin", re.IGNORECASE)).first.click()
+            page.locator('button, ion-button, ion-item, ion-card, a, [role="button"]').filter(
+                has_text=re.compile("click to begin", re.IGNORECASE)
+            ).first.click()
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(1500)
         except Exception:
-            pass
+            try:
+                page.get_by_text(re.compile("click to begin", re.IGNORECASE)).first.click()
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1500)
+            except Exception:
+                pass
 
     # "Are you a current customer?" → click Yes
     try:
