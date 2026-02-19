@@ -105,6 +105,19 @@ def _login(page, email, password):
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(1500)
 
+    # "Are you a current customer?" → click Yes
+    try:
+        page.get_by_role("button", name=re.compile("^Yes$", re.IGNORECASE)).first.click()
+        page.wait_for_timeout(2500)
+    except Exception:
+        try:
+            page.locator('button, ion-button, ion-item, [role="button"]').filter(
+                has_text=re.compile("^Yes$", re.IGNORECASE)
+            ).first.click()
+            page.wait_for_timeout(2500)
+        except Exception:
+            pass
+
     try:
         email_input = page.locator('input[type="email"]:not([id="emailForgot"])')
         email_input.first.wait_for(state="attached", timeout=60000)

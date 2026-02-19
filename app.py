@@ -117,6 +117,18 @@ def debug_screenshot():
             page.goto("https://portal.iclasspro.com/scaq/login")
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(1500)
+            # "Are you a current customer?" → click Yes
+            try:
+                page.get_by_role("button", name=_re.compile("^Yes$", _re.IGNORECASE)).first.click()
+                page.wait_for_timeout(2500)
+            except Exception:
+                try:
+                    page.locator('button, ion-button, ion-item, [role="button"]').filter(
+                        has_text=_re.compile("^Yes$", _re.IGNORECASE)
+                    ).first.click()
+                    page.wait_for_timeout(2500)
+                except Exception:
+                    pass
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(3000)
             img_bytes = page.screenshot(full_page=True)
