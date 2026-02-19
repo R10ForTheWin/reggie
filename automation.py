@@ -57,9 +57,9 @@ def _login(page, email, password):
         page.wait_for_timeout(2000)
 
     try:
-        page.locator('input[type="email"]:not([id="emailForgot"])').first.fill(
-            email, timeout=45000
-        )
+        email_input = page.locator('input[type="email"]:not([id="emailForgot"])')
+        email_input.first.wait_for(state="visible", timeout=60000)
+        email_input.first.fill(email)
     except PlaywrightTimeout:
         # Save screenshot for debugging and raise a clear error
         try:
