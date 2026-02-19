@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Reggie">
+  <meta name="theme-color" content="#0077B6">
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <title>Reggie</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:       #0077B6;
+      --blue-dark:  #03045E;
+      --blue-mid:   #0096C7;
+      --blue-light: #00B4D8;
+      --bg:         #F0F7FF;
+      --card:       #ffffff;
+      --text:       #1a1a2e;
+      --muted:      #6c757d;
+      --success:    #2DC653;
+      --error:      #E63946;
+      --radius:     16px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      min-height: -webkit-fill-available;
+      overflow-x: hidden;
+    }
+
+    /* ── Screens ── */
+    .screen { display: none; min-height: 100vh; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(160deg, var(--blue-dark) 0%, var(--blue) 100%);
+      color: white;
+      padding: max(60px, env(safe-area-inset-top, 60px)) 24px 32px;
+      text-align: center;
+    }
+    .header-icon { font-size: 52px; display: block; margin-bottom: 10px; }
+    .header h1   { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+    .header p    { opacity: 0.8; margin-top: 4px; font-size: 15px; }
+    .header-sm   { padding: max(52px, env(safe-area-inset-top, 52px)) 24px 20px; }
+
+    /* ── Content ── */
+    .content {
+      flex: 1;
+      padding: 24px 20px max(28px, env(safe-area-inset-bottom, 28px));
+      max-width: 480px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 16px;
+    }
+
+    /* ── Form ── */
+    .form-group { margin-bottom: 18px; }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 7px;
+    }
+    .label-note { font-weight: 400; text-transform: none; letter-spacing: 0; }
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      font-size: 16px;
+      font-family: inherit;
+      color: var(--text);
+      background: #fff;
+      transition: border-color 0.2s;
+      -webkit-appearance: none;
+    }
+    input:focus { outline: none; border-color: var(--blue); }
+
+    /* ── Buttons ── */
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 14px;
+      font-size: 17px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: center;
+      transition: opacity 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { transform: scale(0.97); opacity: 0.9; }
+    .btn + .btn  { margin-top: 12px; }
+    .btn-primary  { background: var(--blue);    color: white; }
+    .btn-success  { background: var(--success); color: white; }
+    .btn-outline  { background: transparent; color: var(--blue); border: 2px solid var(--blue); }
+    .btn-lg       { font-size: 19px; padding: 20px; }
+
+    /* ── Profile badge ── */
+    .profile-badge {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 18px;
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      margin-bottom: 24px;
+    }
+    .avatar {
+      width: 46px; height: 46px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 20px;
+      flex-shrink: 0;
+    }
+    .profile-info   { flex: 1; min-width: 0; }
+    .profile-email  { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .profile-promo  { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .edit-link      { color: var(--blue); font-size: 14px; font-weight: 600; background: none; border: none; cursor: pointer; padding: 4px; flex-shrink: 0; }
+
+    /* ── Class list ── */
+    .search-wrap { margin-bottom: 14px; }
+    .class-item {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color 0.15s, background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .class-item:active    { transform: scale(0.985); }
+    .class-item.selected  { border-color: var(--blue); background: #EBF5FF; }
+    .class-name  { font-size: 16px; font-weight: 600; margin-bottom: 3px; }
+    .class-meta  { font-size: 14px; color: var(--muted); margin-top: 2px; }
+    .class-spots { font-size: 13px; font-weight: 600; margin-top: 5px; color: var(--success); }
+    .class-spots.full { color: var(--error); }
+
+    /* ── Confirm card ── */
+    .confirm-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px; }
+    .confirm-value { font-size: 17px; font-weight: 600; }
+    .confirm-sub   { font-size: 14px; color: var(--muted); margin-top: 2px; }
+    .divider { height: 1px; background: #eee; margin: 16px 0; }
+
+    /* ── Loading / result ── */
+    .center-screen {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      flex: 1; padding: 40px 24px; text-align: center;
+    }
+    .wave-loader { display: flex; gap: 8px; margin-bottom: 28px; }
+    .wave-loader span {
+      width: 13px; height: 13px;
+      border-radius: 50%;
+      background: var(--blue);
+      animation: wave-bob 1.2s infinite ease-in-out;
+    }
+    .wave-loader span:nth-child(1) { animation-delay: 0s; }
+    .wave-loader span:nth-child(2) { animation-delay: 0.15s; }
+    .wave-loader span:nth-child(3) { animation-delay: 0.30s; }
+    .wave-loader span:nth-child(4) { animation-delay: 0.45s; }
+    .wave-loader span:nth-child(5) { animation-delay: 0.60s; }
+    @keyframes wave-bob {
+      0%, 60%, 100% { transform: translateY(0); }
+      30%            { transform: translateY(-18px); }
+    }
+    .status-text  { font-size: 16px; color: var(--muted); font-weight: 500; }
+    .result-icon  { font-size: 72px; margin-bottom: 18px; }
+    .result-title { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+    .result-msg   { font-size: 16px; color: var(--muted); margin-bottom: 32px; max-width: 300px; }
+    .result-btn   { width: 200px; }
+
+    .error-inline { color: var(--error); font-size: 14px; margin-top: 10px; text-align: center; }
+    .note         { text-align: center; font-size: 13px; color: var(--muted); margin-top: 14px; }
+    .section-gap  { margin-top: 24px; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════ SETUP -->
+<div class="screen" id="screen-setup">
+  <div class="header">
+    <span class="header-icon">🏊</span>
+    <h1>Welcome to Reggie</h1>
+    <p>Set up your registration profile</p>
+  </div>
+  <div class="content">
+    <div class="card">
+      <div class="form-group">
+        <label>iClassPro Email</label>
+        <input type="email" id="s-email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>iClassPro Password</label>
+        <input type="password" id="s-password" placeholder="Your password" autocomplete="current-password">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Promo / Discount Code <span class="label-note">(optional — saved for every registration)</span></label>
+        <input type="text" id="s-promo" placeholder="e.g. SWIM2024" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      </div>
+    </div>
+    <div id="setup-err" class="error-inline" style="display:none"></div>
+    <div class="section-gap">
+      <button class="btn btn-primary" onclick="saveSetup()">Save &amp; Continue</button>
+    </div>
+    <p class="note">Your info stays on this device only — never sent to our servers without your action</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ HOME -->
+<div class="screen" id="screen-home">
+  <div class="header">
+    <span class="header-icon">🏊</span>
+    <h1>Reggie</h1>
+    <p>Swim Registration Helper</p>
+  </div>
+  <div class="content">
+    <div class="profile-badge">
+      <div class="avatar" id="home-avatar">?</div>
+      <div class="profile-info">
+        <div class="profile-email" id="home-email">—</div>
+        <div class="profile-promo" id="home-promo"></div>
+      </div>
+      <button class="edit-link" onclick="openSetup()">Edit</button>
+    </div>
+    <button class="btn btn-primary btn-lg" onclick="startFindClasses()">Find Classes</button>
+    <p class="note" style="margin-top:20px">Tap to browse open practices and register instantly</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ LOADING -->
+<div class="screen" id="screen-loading">
+  <div class="center-screen">
+    <div class="wave-loader">
+      <span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <div class="status-text" id="loading-msg">Loading...</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ CLASS LIST -->
+<div class="screen" id="screen-classes">
+  <div class="header header-sm">
+    <h1>Available Classes</h1>
+    <p>Tap a class to select it</p>
+  </div>
+  <div class="content">
+    <div class="search-wrap">
+      <input type="text" id="search" placeholder="Search classes..." oninput="filterClasses()" autocomplete="off">
+    </div>
+    <div id="class-list"></div>
+    <button class="btn btn-outline" onclick="show('home')" style="margin-top:8px">Back</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ CONFIRM -->
+<div class="screen" id="screen-confirm">
+  <div class="header header-sm">
+    <h1>Confirm Registration</h1>
+    <p>Review before registering</p>
+  </div>
+  <div class="content">
+    <div class="card">
+      <div class="confirm-label">Class</div>
+      <div class="confirm-value" id="confirm-name">—</div>
+      <div class="confirm-sub"  id="confirm-detail">—</div>
+      <div class="divider"></div>
+      <div class="confirm-label">Promo Code</div>
+      <div class="confirm-value" id="confirm-promo" style="color:var(--blue)">None</div>
+    </div>
+    <button class="btn btn-success" onclick="doRegister()">Register Now</button>
+    <button class="btn btn-outline" onclick="show('classes')">Back</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ SUCCESS -->
+<div class="screen" id="screen-success">
+  <div class="center-screen">
+    <div class="result-icon">✅</div>
+    <div class="result-title">You're In!</div>
+    <div class="result-msg" id="success-msg">Registration complete</div>
+    <button class="btn btn-primary result-btn" onclick="show('home')">Done</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ ERROR -->
+<div class="screen" id="screen-error">
+  <div class="center-screen">
+    <div class="result-icon">❌</div>
+    <div class="result-title">Something went wrong</div>
+    <div class="result-msg" id="error-msg">An error occurred</div>
+    <button class="btn btn-primary result-btn" onclick="show('home')">Try Again</button>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+let allClasses    = [];
+let selectedClass = null;
+let studentId     = null;
+
+// ── Screen nav ────────────────────────────────────────────────────────────
+function show(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// ── Profile helpers ───────────────────────────────────────────────────────
+function getProfile() {
+  return {
+    email:    localStorage.getItem('reggie_email')    || '',
+    password: localStorage.getItem('reggie_password') || '',
+    promo:    localStorage.getItem('reggie_promo')    || '',
+  };
+}
+function storeProfile(email, password, promo) {
+  localStorage.setItem('reggie_email',    email);
+  localStorage.setItem('reggie_password', password);
+  localStorage.setItem('reggie_promo',    promo);
+}
+
+// ── Setup ─────────────────────────────────────────────────────────────────
+function openSetup() {
+  const p = getProfile();
+  document.getElementById('s-email').value    = p.email;
+  document.getElementById('s-password').value = p.password;
+  document.getElementById('s-promo').value    = p.promo;
+  document.getElementById('setup-err').style.display = 'none';
+  show('setup');
+}
+
+function saveSetup() {
+  const email    = document.getElementById('s-email').value.trim();
+  const password = document.getElementById('s-password').value;
+  const promo    = document.getElementById('s-promo').value.trim().toUpperCase();
+  const errEl    = document.getElementById('setup-err');
+
+  if (!email || !password) {
+    errEl.textContent = 'Email and password are required';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+  storeProfile(email, password, promo);
+  loadHome();
+  show('home');
+}
+
+function loadHome() {
+  const p = getProfile();
+  document.getElementById('home-avatar').textContent = p.email ? p.email[0].toUpperCase() : '?';
+  document.getElementById('home-email').textContent  = p.email || 'Not configured';
+  document.getElementById('home-promo').textContent  = p.promo
+    ? 'Promo: ' + p.promo
+    : 'No promo code saved';
+}
+
+// ── Job polling ───────────────────────────────────────────────────────────
+async function pollJob(jobId, onProgress, onDone, onError) {
+  while (true) {
+    await new Promise(r => setTimeout(r, 1000));
+    try {
+      const res = await fetch('/api/job/' + jobId);
+      const job = await res.json();
+      if (job.message && onProgress) onProgress(job.message);
+      if (job.status === 'done')  { onDone(job.result);  return; }
+      if (job.status === 'error') { onError(job.message); return; }
+    } catch (e) {
+      onError('Lost connection to server');
+      return;
+    }
+  }
+}
+
+// ── Find classes ──────────────────────────────────────────────────────────
+async function startFindClasses() {
+  const p = getProfile();
+  if (!p.email || !p.password) { openSetup(); return; }
+
+  document.getElementById('loading-msg').textContent = 'Logging in...';
+  show('loading');
+
+  try {
+    const res  = await fetch('/api/classes', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email: p.email, password: p.password }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    pollJob(data.job_id,
+      msg => { document.getElementById('loading-msg').textContent = msg; },
+      result => {
+        allClasses = result.classes || [];
+        studentId  = result.student_id;
+        renderClasses(allClasses);
+        document.getElementById('search').value = '';
+        show('classes');
+      },
+      err => {
+        document.getElementById('error-msg').textContent = err;
+        show('error');
+      }
+    );
+  } catch (err) {
+    document.getElementById('error-msg').textContent = err.message;
+    show('error');
+  }
+}
+
+// ── Class list ────────────────────────────────────────────────────────────
+function renderClasses(list) {
+  const el = document.getElementById('class-list');
+  if (!list.length) {
+    el.innerHTML = '<p style="text-align:center;color:var(--muted);padding:32px 0">No classes found</p>';
+    return;
+  }
+  el.innerHTML = list.map((cls, i) => {
+    const name  = cls.className || cls.name || ('Class ' + cls.id);
+    const day   = cls.dayOfWeek   || '';
+    const start = cls.startTime   || '';
+    const end   = cls.endTime     || '';
+    const instr = cls.instructorName || (cls.instructor && cls.instructor.name) || '';
+    const spots = cls.openSpots;
+    const sched = [day, (start && end) ? start + '–' + end : start].filter(Boolean).join(' ');
+    const spotsStr   = spots != null ? spots + ' spot' + (spots !== 1 ? 's' : '') + ' open' : '';
+    const spotsClass = (spots != null && spots === 0) ? 'class-spots full' : 'class-spots';
+
+    return `<div class="class-item" onclick="selectClass(${i})" data-idx="${i}">
+      <div class="class-name">${name}</div>
+      ${sched  ? `<div class="class-meta">${sched}</div>` : ''}
+      ${instr  ? `<div class="class-meta">with ${instr}</div>` : ''}
+      ${spotsStr ? `<div class="${spotsClass}">${spotsStr}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function filterClasses() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const filtered = allClasses.filter(c =>
+    (c.className || c.name || '').toLowerCase().includes(q)
+  );
+  renderClasses(filtered);
+}
+
+function selectClass(i) {
+  selectedClass = allClasses[i];
+  const name  = selectedClass.className || selectedClass.name || ('Class ' + selectedClass.id);
+  const day   = selectedClass.dayOfWeek || '';
+  const start = selectedClass.startTime || '';
+  const end   = selectedClass.endTime   || '';
+  const instr = selectedClass.instructorName || '';
+  const parts = [day, (start && end) ? start + '–' + end : start, instr].filter(Boolean);
+  const promo = getProfile().promo;
+
+  document.getElementById('confirm-name').textContent   = name;
+  document.getElementById('confirm-detail').textContent = parts.join(' · ') || 'See class for details';
+  document.getElementById('confirm-promo').textContent  = promo || 'None';
+  document.getElementById('confirm-promo').style.color  = promo ? 'var(--success)' : 'var(--muted)';
+  show('confirm');
+}
+
+// ── Register ──────────────────────────────────────────────────────────────
+async function doRegister() {
+  const p = getProfile();
+  if (!selectedClass) return;
+
+  document.getElementById('loading-msg').textContent = 'Starting registration...';
+  show('loading');
+
+  try {
+    const res  = await fetch('/api/register', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        email:      p.email,
+        password:   p.password,
+        class_id:   selectedClass.id,
+        student_id: studentId,
+        promo_code: p.promo || '',
+      }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    pollJob(data.job_id,
+      msg => { document.getElementById('loading-msg').textContent = msg; },
+      () => {
+        const name = selectedClass.className || selectedClass.name || 'your class';
+        document.getElementById('success-msg').textContent = `Registered for ${name}!`;
+        show('success');
+      },
+      err => {
+        document.getElementById('error-msg').textContent = err;
+        show('error');
+      }
+    );
+  } catch (err) {
+    document.getElementById('error-msg').textContent = err.message;
+    show('error');
+  }
+}
+
+// ── PWA service worker ────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+(function init() {
+  const p = getProfile();
+  if (p.email && p.password) {
+    loadHome();
+    show('home');
+  } else {
+    show('setup');
+  }
+})();
+</script>
+</body>
+</html>
