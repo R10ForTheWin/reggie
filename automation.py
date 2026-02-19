@@ -136,19 +136,29 @@ def _login(page, email, password):
             "PerimeterX may be blocking the server — try again in a moment."
         )
 
-    page.locator('input[type="password"]').first.fill(password)
+    pwd_input = page.locator('input[type="password"]').first
+    pwd_input.fill(password)
     page.wait_for_timeout(500)
-    # Try submit button, then Next nav button (Ionic portals use nav-style submit)
+    # The visible submit is the "Next" nav button; the form's button[type=submit] is hidden
+    submitted = False
     try:
-        page.locator('button[type="submit"]').first.click()
+        page.get_by_role("button", name=re.compile(r"^next$", re.IGNORECASE)).first.click()
+        submitted = True
     except Exception:
+        pass
+    if not submitted:
         try:
-            page.get_by_role("button", name=re.compile(r"next|sign.in|log.in|submit", re.IGNORECASE)).first.click()
+            page.locator('button, ion-button').filter(
+                has_text=re.compile(r"^next$", re.IGNORECASE)
+            ).first.click()
+            submitted = True
         except Exception:
-            page.locator('button, ion-button').filter(has_text=re.compile(r"next|sign.in|log.in", re.IGNORECASE)).first.click()
+            pass
+    if not submitted:
+        # Last resort: press Enter on the password field
+        pwd_input.press("Enter")
     try:
         page.wait_for_url("**/scaq/**", timeout=30000)
-        # Make sure we're not still on the login page
         if "/login" in page.url:
             raise PlaywrightTimeout("Still on login page")
     except PlaywrightTimeout:
