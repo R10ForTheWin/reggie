@@ -4,7 +4,30 @@ Called by app.py in background threads.
 """
 
 import re
+import threading
+import time
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+
+# ── Token cache ────────────────────────────────────────────────────────────
+# Stores JWT tokens per email so repeat loads skip the browser login entirely.
+_token_cache      = {}   # email -> {"token": str, "expires_at": float}
+_token_cache_lock = threading.Lock()
+_TOKEN_TTL        = 3600  # 1 hour
+
+def _get_cached_token(email):
+    with _token_cache_lock:
+        entry = _token_cache.get(email)
+        if entry and entry["expires_at"] > time.time():
+            return entry["token"]
+    return None
+
+def _cache_token(email, token):
+    with _token_cache_lock:
+        _token_cache[email] = {"token": token, "expires_at": time.time() + _TOKEN_TTL}
+
+def _invalidate_token(email):
+    with _token_cache_lock:
+        _token_cache.pop(email, None)
 
 PORTAL = "https://portal.iclasspro.com/scaq"
 
@@ -146,12 +169,8 @@ def _api_get(path, params, token):
         return json.loads(resp.read())
 
 
-def get_classes(email, password, callback=None):
-    """Log in via browser, capture JWT token, then fetch classes via direct API."""
-    def cb(msg):
-        if callback:
-            callback(msg)
-
+def _browser_get_token(email, password, cb):
+    """Launch browser, log in, capture and return the JWT token."""
     captured = {"token": None}
 
     with sync_playwright() as p:
@@ -161,14 +180,12 @@ def get_classes(email, password, callback=None):
             try:
                 if resp.status != 200 or captured["token"]:
                     return
-                # Capture token from login response body
                 if "/jwt/v1/login" in resp.url:
                     data = resp.json()
                     tok = data.get("token") or data.get("access_token")
                     if tok:
                         captured["token"] = tok
                         return
-                # Fallback: grab token from any JWT API URL query param
                 if "app.iclasspro.com/api/jwt/v1/" in resp.url and "token=" in resp.url:
                     import urllib.parse
                     tok = urllib.parse.parse_qs(
@@ -180,11 +197,8 @@ def get_classes(email, password, callback=None):
                 pass
 
         page.on("response", on_response)
-
-        cb("Logging in...")
         _login(page, email, password)
 
-        # Wait briefly for token if not yet captured from login response
         for _ in range(10):
             if captured["token"]:
                 break
@@ -192,32 +206,54 @@ def get_classes(email, password, callback=None):
 
         browser.close()
 
-    token = captured["token"]
-    if not token:
-        raise Exception("Could not capture session token — please try again.")
+    return captured["token"]
 
-    # Direct API calls — no more page navigations needed
-    cb("Detecting your student profile...")
-    students_raw = _api_get("students", {}, token)
-    lst = (students_raw.get("data") or students_raw.get("students")
-           or (students_raw if isinstance(students_raw, list) else []))
-    if not lst:
-        raise Exception("Could not detect your student profile — please try again.")
-    student_id = lst[0].get("id") or lst[0].get("studentId")
-    if not student_id:
-        raise Exception("Could not detect your student profile — please try again.")
 
-    cb("Loading available classes...")
-    classes_raw = _api_get("classes", {
-        "locationId":       1,
-        "limit":            100,
-        "page":             1,
-        "students":         student_id,
-        "futureOpeningDate": "false",
-    }, token)
-    classes_lst = (classes_raw.get("data") or classes_raw.get("classes")
-                   or (classes_raw if isinstance(classes_raw, list) else []))
-    return {"classes": classes_lst, "student_id": student_id}
+def get_classes(email, password, callback=None):
+    """Return available classes. Uses cached JWT token when available — browser only on first call."""
+    def cb(msg):
+        if callback:
+            callback(msg)
+
+    # Fast path: cached token → no browser needed
+    token = _get_cached_token(email)
+    if token:
+        cb("Using saved session...")
+    else:
+        cb("Logging in...")
+        token = _browser_get_token(email, password, cb)
+        if not token:
+            raise Exception("Could not capture session token — please try again.")
+        _cache_token(email, token)
+
+    try:
+        cb("Detecting your student profile...")
+        students_raw = _api_get("students", {}, token)
+        lst = (students_raw.get("data") or students_raw.get("students")
+               or (students_raw if isinstance(students_raw, list) else []))
+        if not lst:
+            raise Exception("Could not detect your student profile — please try again.")
+        student_id = lst[0].get("id") or lst[0].get("studentId")
+        if not student_id:
+            raise Exception("Could not detect your student profile — please try again.")
+
+        cb("Loading available classes...")
+        classes_raw = _api_get("classes", {
+            "locationId":        1,
+            "limit":             100,
+            "page":              1,
+            "students":          student_id,
+            "futureOpeningDate": "false",
+        }, token)
+        classes_lst = (classes_raw.get("data") or classes_raw.get("classes")
+                       or (classes_raw if isinstance(classes_raw, list) else []))
+        return {"classes": classes_lst, "student_id": student_id}
+
+    except Exception as e:
+        # Token may have expired — invalidate and let caller retry
+        if "401" in str(e) or "403" in str(e) or "token" in str(e).lower():
+            _invalidate_token(email)
+        raise
 
 
 def run_registration(email, password, class_id, student_id, promo_code=None, callback=None, dry_run=False):
@@ -244,7 +280,11 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         page.on("response", on_response)
 
         cb("Logging in...")
-        _login(page, email, password)
+        try:
+            _login(page, email, password)
+        except Exception:
+            _invalidate_token(email)  # force fresh login next time
+            raise
 
         cb("Opening enrollment page...")
         enroll_url = (
