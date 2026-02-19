@@ -60,6 +60,19 @@ def _login(page, email, password):
         except Exception:
             pass
 
+    # "Click to begin" interstitial (appears after SCAQ selection)
+    try:
+        page.get_by_role("button", name=re.compile("click.to.begin", re.IGNORECASE)).first.click()
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(1500)
+    except Exception:
+        try:
+            page.locator('button, ion-button').filter(has_text=re.compile("click to begin", re.IGNORECASE)).first.click()
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(1500)
+        except Exception:
+            pass
+
     # "Are you a current customer?" → click Yes
     try:
         page.get_by_role("button", name=re.compile("^Yes$", re.IGNORECASE)).first.click()
