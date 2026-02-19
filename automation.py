@@ -42,91 +42,56 @@ def _new_browser(p):
     return browser, page
 
 
+def _click_first(page, text_re, timeout=5000):
+    """Try role=button, then broad Ionic selector, then get_by_text. Silently skip if not found."""
+    try:
+        page.get_by_role("button", name=text_re).first.click(timeout=timeout)
+        return
+    except Exception:
+        pass
+    try:
+        page.locator('button, ion-button, ion-item, ion-card, a, [role="button"]').filter(
+            has_text=text_re
+        ).first.click(timeout=timeout)
+        return
+    except Exception:
+        pass
+    try:
+        page.get_by_text(text_re).first.click(timeout=timeout)
+    except Exception:
+        pass
+
+
 def _login(page, email, password):
-    # Hit the locations page first and auto-select SCAQ
-    page.goto(f"https://portal.iclasspro.com/scaq/locations?next=https://portal.iclasspro.com/scaq")
+    # Locations page → select SCAQ
+    page.goto("https://portal.iclasspro.com/scaq/locations?next=https://portal.iclasspro.com/scaq")
     page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(1500)
-    # Click SCAQ using role-based selector
-    try:
-        page.get_by_role("button", name=re.compile("SCAQ", re.IGNORECASE)).first.click()
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(1500)
-    except Exception:
-        try:
-            page.locator('button, ion-button').filter(has_text="SCAQ").first.click()
-            page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(1500)
-        except Exception:
-            pass
+    _click_first(page, re.compile("SCAQ", re.IGNORECASE))
+    page.wait_for_load_state("networkidle")
 
-    # "Click to begin" interstitial (appears after SCAQ selection)
-    try:
-        page.get_by_role("button", name=re.compile("click.to.begin", re.IGNORECASE)).first.click()
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(1500)
-    except Exception:
-        try:
-            page.locator('button, ion-button, ion-item, ion-card, a, [role="button"]').filter(
-                has_text=re.compile("click to begin", re.IGNORECASE)
-            ).first.click()
-            page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(1500)
-        except Exception:
-            try:
-                page.get_by_text(re.compile("click to begin", re.IGNORECASE)).first.click()
-                page.wait_for_load_state("networkidle")
-                page.wait_for_timeout(1500)
-            except Exception:
-                pass
+    # "Click to begin" interstitial
+    _click_first(page, re.compile(r"click.to.begin", re.IGNORECASE))
+    page.wait_for_load_state("networkidle")
 
-    # "Welcome Info / Got It!" modal
-    try:
-        page.get_by_role("button", name=re.compile("got.it", re.IGNORECASE)).first.click()
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(1500)
-    except Exception:
-        try:
-            page.locator('button, ion-button, ion-item, ion-card, a, [role="button"]').filter(
-                has_text=re.compile("got.it", re.IGNORECASE)
-            ).first.click()
-            page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(1500)
-        except Exception:
-            try:
-                page.get_by_text(re.compile("got.it", re.IGNORECASE)).first.click()
-                page.wait_for_load_state("networkidle")
-                page.wait_for_timeout(1500)
-            except Exception:
-                pass
+    # "Welcome Info" → Got It
+    _click_first(page, re.compile(r"got.it", re.IGNORECASE))
+    page.wait_for_load_state("networkidle")
 
-    # Navigate directly to login page — session/location already established
+    # Go directly to login page (location session already set)
     page.goto(f"{PORTAL}/login")
     page.wait_for_load_state("networkidle")
+
+    # "Are you a current customer?" → Yes
+    _click_first(page, re.compile(r"^Yes$", re.IGNORECASE))
     page.wait_for_timeout(1500)
 
-    # "Are you a current customer?" → click Yes
-    try:
-        page.get_by_role("button", name=re.compile("^Yes$", re.IGNORECASE)).first.click()
-        page.wait_for_timeout(2500)
-    except Exception:
-        try:
-            page.locator('button, ion-button, ion-item, [role="button"]').filter(
-                has_text=re.compile("^Yes$", re.IGNORECASE)
-            ).first.click()
-            page.wait_for_timeout(2500)
-        except Exception:
-            pass
-
+    # Fill email
     try:
         email_input = page.locator('input[type="email"]:not([id="emailForgot"])')
         email_input.first.wait_for(state="attached", timeout=60000)
-        page.wait_for_timeout(1000)
         email_input.first.click()
-        page.wait_for_timeout(300)
-        email_input.first.fill("")          # clear first
-        email_input.first.press_sequentially(email, delay=50)
-        page.wait_for_timeout(300)
+        email_input.first.fill("")
+        email_input.first.press_sequentially(email, delay=20)
     except PlaywrightTimeout:
         try:
             page.screenshot(path="/tmp/reggie_login_debug.png", full_page=True)
@@ -137,12 +102,12 @@ def _login(page, email, password):
             "PerimeterX may be blocking the server — try again in a moment."
         )
 
+    # Fill password
     pwd_input = page.locator('input[type="password"]').first
     pwd_input.click()
+    pwd_input.fill("")
+    pwd_input.press_sequentially(password, delay=20)
     page.wait_for_timeout(300)
-    pwd_input.fill("")                      # clear first
-    pwd_input.press_sequentially(password, delay=50)
-    page.wait_for_timeout(500)
     # The visible submit is the "Next" nav button; the form's button[type=submit] is hidden
     submitted = False
     try:
@@ -197,7 +162,6 @@ def get_classes(email, password, callback=None):
         cb("Detecting your student profile...")
         page.goto(f"{PORTAL}/enroll/select-students")
         page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(2000)
 
         student_id = None
         if captured["students"]:
