@@ -49,7 +49,7 @@ def ping():
     return "ok", 200
 
 
-@app.route("/debug/screenshot")
+@app.route("/snap")
 def debug_screenshot():
     """Take a screenshot of what Playwright sees on the login page."""
     import io
