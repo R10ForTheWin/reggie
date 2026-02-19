@@ -123,10 +123,11 @@ def _login(page, email, password):
         email_input.first.wait_for(state="attached", timeout=60000)
         page.wait_for_timeout(1000)
         email_input.first.click()
-        page.wait_for_timeout(500)
-        email_input.first.fill(email)
+        page.wait_for_timeout(300)
+        email_input.first.fill("")          # clear first
+        email_input.first.press_sequentially(email, delay=50)
+        page.wait_for_timeout(300)
     except PlaywrightTimeout:
-        # Save screenshot for debugging and raise a clear error
         try:
             page.screenshot(path="/tmp/reggie_login_debug.png", full_page=True)
         except Exception:
@@ -137,7 +138,10 @@ def _login(page, email, password):
         )
 
     pwd_input = page.locator('input[type="password"]').first
-    pwd_input.fill(password)
+    pwd_input.click()
+    page.wait_for_timeout(300)
+    pwd_input.fill("")                      # clear first
+    pwd_input.press_sequentially(password, delay=50)
     page.wait_for_timeout(500)
     # The visible submit is the "Next" nav button; the form's button[type=submit] is hidden
     submitted = False
@@ -158,9 +162,7 @@ def _login(page, email, password):
         # Last resort: press Enter on the password field
         pwd_input.press("Enter")
     try:
-        page.wait_for_url("**/scaq/**", timeout=30000)
-        if "/login" in page.url:
-            raise PlaywrightTimeout("Still on login page")
+        page.wait_for_function("!window.location.href.includes('/login')", timeout=30000)
     except PlaywrightTimeout:
         raise Exception("Login failed — double-check your email and password.")
 
