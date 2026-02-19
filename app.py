@@ -69,6 +69,12 @@ def debug_screenshot():
                 page.wait_for_timeout(1000)
             except Exception:
                 pass
+            try:
+                page.get_by_text("Yes").first.click()
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1000)
+            except Exception:
+                pass
             page.goto(f"{PORTAL}/login")
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(3000)

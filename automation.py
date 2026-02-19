@@ -54,6 +54,14 @@ def _login(page, email, password):
     except Exception:
         pass
 
+    # "Are you a current customer?" → click Yes
+    try:
+        page.get_by_text("Yes").first.click()
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(1000)
+    except Exception:
+        pass
+
     # Now go to login
     page.goto(f"{PORTAL}/login")
     page.wait_for_load_state("networkidle")
