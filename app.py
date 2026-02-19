@@ -49,6 +49,26 @@ def ping():
     return "ok", 200
 
 
+@app.route("/debug/screenshot")
+def debug_screenshot():
+    """Take a screenshot of what Playwright sees on the login page."""
+    import io
+    from flask import send_file
+    from playwright.sync_api import sync_playwright
+    from automation import _new_browser, PORTAL
+    try:
+        with sync_playwright() as p:
+            browser, page = _new_browser(p)
+            page.goto(f"{PORTAL}/login")
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(3000)
+            img_bytes = page.screenshot(full_page=True)
+            browser.close()
+        return send_file(io.BytesIO(img_bytes), mimetype="image/png")
+    except Exception as e:
+        return f"Error: {e}", 500
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
