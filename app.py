@@ -178,6 +178,7 @@ def api_register():
     class_id   = data.get("class_id")
     student_id = data.get("student_id")
     promo      = data.get("promo_code", "").strip()
+    dry_run    = bool(data.get("dry_run", False))
 
     if not all([email, password, class_id, student_id]):
         return jsonify({"error": "Missing required fields"}), 400
@@ -187,10 +188,14 @@ def api_register():
     def run():
         from automation import run_registration
         try:
-            run_registration(email, password, class_id, student_id,
+            result = run_registration(email, password, class_id, student_id,
                              promo_code=promo or None,
-                             callback=lambda m: _update(jid, message=m))
-            _update(jid, status="done", message="Registration complete!")
+                             callback=lambda m: _update(jid, message=m),
+                             dry_run=dry_run)
+            if result == "dry_run":
+                _update(jid, status="done", message="Dry run complete — everything worked up to checkout!")
+            else:
+                _update(jid, status="done", message="Registration complete!")
         except Exception as e:
             _update(jid, status="error", message=str(e))
 

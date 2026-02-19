@@ -189,7 +189,7 @@ def get_classes(email, password, callback=None):
     return {"classes": lst, "student_id": student_id}
 
 
-def run_registration(email, password, class_id, student_id, promo_code=None, callback=None):
+def run_registration(email, password, class_id, student_id, promo_code=None, callback=None, dry_run=False):
     """Complete the full registration flow for a given class."""
     def cb(msg):
         if callback:
@@ -277,6 +277,11 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 page.wait_for_timeout(1500)
             except Exception as e:
                 cb(f"Note: could not auto-apply promo code ({e})")
+
+        if dry_run:
+            cb("Dry run complete — stopping before checkout.")
+            browser.close()
+            return "dry_run"
 
         cb("Completing checkout...")
         try:
