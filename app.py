@@ -2,23 +2,47 @@
 Reggie – Flask web app
 """
 
+import os
 import threading
 import time
 import uuid
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request
 
 app  = Flask(__name__)
 _jobs      = {}
 _jobs_lock = threading.Lock()
 
+# Only one Playwright browser at a time — prevents OOM on free tier
+_browser_lock = threading.BoundedSemaphore(1)
+
+
+# ── Security headers ───────────────────────────────────────────────────────
+
+@app.before_request
+def https_redirect():
+    if request.headers.get("X-Forwarded-Proto", "https") == "http":
+        return redirect(request.url.replace("http://", "https://"), 301)
+
+
+@app.after_request
+def security_headers(response):
+    response.headers["X-Frame-Options"]        = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
+    return response
+
 
 # ── Job helpers ───────────────────────────────────────────────────────────
 
 def _cleanup():
+    """Remove only terminal-state jobs older than 10 minutes. Never delete running jobs."""
     cutoff = time.time() - 600
     with _jobs_lock:
-        stale = [jid for jid, j in _jobs.items() if j["created_at"] < cutoff]
+        stale = [
+            jid for jid, j in _jobs.items()
+            if j["status"] in ("done", "error") and j["created_at"] < cutoff
+        ]
         for jid in stale:
             del _jobs[jid]
 
@@ -51,91 +75,40 @@ def ping():
 
 @app.route("/snap")
 def debug_screenshot():
-    """Replicate the exact automation flow and screenshot the login page."""
+    """Debug route — only available when DEBUG_ROUTES=true env var is set."""
+    if os.environ.get("DEBUG_ROUTES", "").lower() != "true":
+        return "Not found", 404
+
     import io
+    import re as _re
     from flask import send_file
     from playwright.sync_api import sync_playwright
-    from automation import _new_browser, PORTAL
+    from automation import _new_browser
     try:
         with sync_playwright() as p:
             browser, page = _new_browser(p)
-            # Replicate exact automation flow
             page.goto("https://portal.iclasspro.com/scaq/locations?next=https://portal.iclasspro.com/scaq")
             page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(1500)
-            import re as _re
-            try:
-                page.get_by_role("button", name=_re.compile("SCAQ", _re.IGNORECASE)).first.click()
-                page.wait_for_load_state("networkidle")
-                page.wait_for_timeout(1500)
-            except Exception:
+            for text in [_re.compile("SCAQ", _re.IGNORECASE),
+                         _re.compile(r"click.to.begin", _re.IGNORECASE),
+                         _re.compile(r"got.it", _re.IGNORECASE)]:
                 try:
-                    page.locator('button, ion-button').filter(has_text="SCAQ").first.click()
+                    page.get_by_role("button", name=text).first.click(timeout=4000)
                     page.wait_for_load_state("networkidle")
-                    page.wait_for_timeout(1500)
                 except Exception:
                     pass
-            # "Click to begin" interstitial
-            try:
-                page.get_by_role("button", name=_re.compile("click.to.begin", _re.IGNORECASE)).first.click()
-                page.wait_for_load_state("networkidle")
-                page.wait_for_timeout(1500)
-            except Exception:
-                try:
-                    page.locator('button, ion-button, ion-item, ion-card, a, [role="button"]').filter(
-                        has_text=_re.compile("click to begin", _re.IGNORECASE)
-                    ).first.click()
-                    page.wait_for_load_state("networkidle")
-                    page.wait_for_timeout(1500)
-                except Exception:
-                    try:
-                        page.get_by_text(_re.compile("click to begin", _re.IGNORECASE)).first.click()
-                        page.wait_for_load_state("networkidle")
-                        page.wait_for_timeout(1500)
-                    except Exception:
-                        pass
-            # "Welcome Info / Got It!" modal
-            try:
-                page.get_by_role("button", name=_re.compile("got.it", _re.IGNORECASE)).first.click()
-                page.wait_for_load_state("networkidle")
-                page.wait_for_timeout(1500)
-            except Exception:
-                try:
-                    page.locator('button, ion-button, ion-item, ion-card, a, [role="button"]').filter(
-                        has_text=_re.compile("got.it", _re.IGNORECASE)
-                    ).first.click()
-                    page.wait_for_load_state("networkidle")
-                    page.wait_for_timeout(1500)
-                except Exception:
-                    try:
-                        page.get_by_text(_re.compile("got.it", _re.IGNORECASE)).first.click()
-                        page.wait_for_load_state("networkidle")
-                        page.wait_for_timeout(1500)
-                    except Exception:
-                        pass
-            # Navigate directly to login page — session/location already established
             page.goto("https://portal.iclasspro.com/scaq/login")
             page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(1500)
-            # "Are you a current customer?" → click Yes
             try:
-                page.get_by_role("button", name=_re.compile("^Yes$", _re.IGNORECASE)).first.click()
-                page.wait_for_timeout(2500)
+                page.get_by_role("button", name=_re.compile("^Yes$", _re.IGNORECASE)).first.click(timeout=4000)
+                page.wait_for_timeout(1500)
             except Exception:
-                try:
-                    page.locator('button, ion-button, ion-item, [role="button"]').filter(
-                        has_text=_re.compile("^Yes$", _re.IGNORECASE)
-                    ).first.click()
-                    page.wait_for_timeout(2500)
-                except Exception:
-                    pass
-            page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(3000)
+                pass
             img_bytes = page.screenshot(full_page=True)
             browser.close()
         return send_file(io.BytesIO(img_bytes), mimetype="image/png")
     except Exception as e:
-        return f"Error: {e}", 500
+        return "Snapshot error — check server logs", 500
 
 
 @app.route("/")
@@ -156,14 +129,20 @@ def api_classes():
     jid = _create_job()
 
     def run():
-        from automation import get_classes
+        if not _browser_lock.acquire(timeout=15):
+            _update(jid, status="error",
+                    message="Another job is already running — please wait a moment and try again.")
+            return
         try:
+            from automation import get_classes
             _update(jid, message="Logging in...")
             result = get_classes(email, password,
                                  callback=lambda m: _update(jid, message=m))
             _update(jid, status="done", message="Classes loaded", result=result)
         except Exception as e:
-            _update(jid, status="error", message=str(e))
+            _update(jid, status="error", message=_safe_error(e))
+        finally:
+            _browser_lock.release()
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"job_id": jid})
@@ -186,18 +165,27 @@ def api_register():
     jid = _create_job()
 
     def run():
-        from automation import run_registration
+        if not _browser_lock.acquire(timeout=15):
+            _update(jid, status="error",
+                    message="Another job is already running — please wait a moment and try again.")
+            return
         try:
+            from automation import run_registration
             result = run_registration(email, password, class_id, student_id,
-                             promo_code=promo or None,
-                             callback=lambda m: _update(jid, message=m),
-                             dry_run=dry_run)
+                                      promo_code=promo or None,
+                                      callback=lambda m: _update(jid, message=m),
+                                      dry_run=dry_run)
             if result == "dry_run":
-                _update(jid, status="done", message="Dry run complete — everything worked up to checkout!")
+                _update(jid, status="done",
+                        message="Dry run complete — everything worked up to checkout!",
+                        result={"dry_run": True})
             else:
-                _update(jid, status="done", message="Registration complete!")
+                _update(jid, status="done", message="Registration complete!",
+                        result={"dry_run": False})
         except Exception as e:
-            _update(jid, status="error", message=str(e))
+            _update(jid, status="error", message=_safe_error(e))
+        finally:
+            _browser_lock.release()
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"job_id": jid})
@@ -206,6 +194,29 @@ def api_register():
 @app.route("/api/job/<jid>")
 def api_job(jid):
     return jsonify(_get(jid))
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────
+
+# Known user-safe messages — pass through as-is
+_SAFE_ERRORS = (
+    "Login failed",
+    "PerimeterX",
+    "already enrolled",
+    "Could not add to cart",
+    "Could not complete checkout",
+    "Could not detect your student profile",
+    "Another job is already running",
+)
+
+def _safe_error(exc):
+    msg = str(exc)
+    for safe in _SAFE_ERRORS:
+        if safe.lower() in msg.lower():
+            return msg
+    # Don't leak internal details — log server-side and return generic message
+    app.logger.error("Internal error: %s", msg)
+    return "Something went wrong on the server — please try again."
 
 
 # ── Entry point ───────────────────────────────────────────────────────────

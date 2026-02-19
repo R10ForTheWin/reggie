@@ -387,21 +387,36 @@ function loadHome() {
     : 'No promo code saved';
 }
 
+// ── HTML escaping (XSS prevention) ────────────────────────────────────────
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── Job polling ───────────────────────────────────────────────────────────
 async function pollJob(jobId, onProgress, onDone, onError) {
-  while (true) {
+  const MAX_POLLS = 240; // 4 minutes max
+  let polls = 0;
+  while (polls++ < MAX_POLLS) {
     await new Promise(r => setTimeout(r, 1000));
     try {
       const res = await fetch('/api/job/' + jobId);
       const job = await res.json();
       if (job.message && onProgress) onProgress(job.message);
-      if (job.status === 'done')  { onDone(job.result);  return; }
-      if (job.status === 'error') { onError(job.message); return; }
+      if (job.status === 'done')      { onDone(job.result);  return; }
+      if (job.status === 'error')     { onError(job.message); return; }
+      if (job.status === 'not_found') { onError('Server restarted mid-job — please check the iClassPro portal to confirm your registration status.'); return; }
     } catch (e) {
       onError('Lost connection to server');
       return;
     }
   }
+  onError('Timed out waiting for response — please check the iClassPro portal to confirm your registration status.');
 }
 
 // ── Find classes ──────────────────────────────────────────────────────────
@@ -449,11 +464,11 @@ function renderClasses(list) {
     return;
   }
   el.innerHTML = list.map((cls, i) => {
-    const name  = cls.className || cls.name || ('Class ' + cls.id);
-    const day   = cls.dayOfWeek   || '';
-    const start = cls.startTime   || '';
-    const end   = cls.endTime     || '';
-    const instr = cls.instructorName || (cls.instructor && cls.instructor.name) || '';
+    const name  = esc(cls.className || cls.name || ('Class ' + cls.id));
+    const day   = esc(cls.dayOfWeek   || '');
+    const start = esc(cls.startTime   || '');
+    const end   = esc(cls.endTime     || '');
+    const instr = esc(cls.instructorName || (cls.instructor && cls.instructor.name) || '');
     const spots = cls.openSpots;
     const sched = [day, (start && end) ? start + '–' + end : start].filter(Boolean).join(' ');
     const spotsStr   = spots != null ? spots + ' spot' + (spots !== 1 ? 's' : '') + ' open' : '';
@@ -462,7 +477,7 @@ function renderClasses(list) {
     return `<div class="class-item" onclick="selectClass(${i})" data-idx="${i}">
       <div class="class-name">${name}</div>
       ${sched  ? `<div class="class-meta">${sched}</div>` : ''}
-      ${instr  ? `<div class="class-meta">with ${instr}</div>` : ''}
+      ${instr  ? `<div class="class-meta">with ${esc(instr)}</div>` : ''}
       ${spotsStr ? `<div class="${spotsClass}">${spotsStr}</div>` : ''}
     </div>`;
   }).join('');
@@ -519,9 +534,14 @@ async function doRegister() {
 
     pollJob(data.job_id,
       msg => { document.getElementById('loading-msg').textContent = msg; },
-      () => {
-        const name = selectedClass.className || selectedClass.name || 'your class';
-        document.getElementById('success-msg').textContent = `Registered for ${name}!`;
+      result => {
+        if (result && result.dry_run) {
+          document.getElementById('success-msg').textContent =
+            'Dry run complete! Everything worked up to checkout — no registration was submitted.';
+        } else {
+          const name = selectedClass.className || selectedClass.name || 'your class';
+          document.getElementById('success-msg').textContent = `Registered for ${name}!`;
+        }
         show('success');
       },
       err => {

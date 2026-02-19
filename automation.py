@@ -93,10 +93,6 @@ def _login(page, email, password):
         email_input.first.fill("")
         email_input.first.press_sequentially(email, delay=20)
     except PlaywrightTimeout:
-        try:
-            page.screenshot(path="/tmp/reggie_login_debug.png", full_page=True)
-        except Exception:
-            pass
         raise Exception(
             f"Could not find login form (page: {page.url}). "
             "PerimeterX may be blocking the server — try again in a moment."
@@ -171,7 +167,7 @@ def get_classes(email, password, callback=None):
                 student_id = lst[0].get("id") or lst[0].get("studentId")
 
         if not student_id:
-            student_id = 3328  # fallback from recorded session
+            raise Exception("Could not detect your student profile — please try again.")
 
         cb("Loading available classes...")
         page.goto(f"{PORTAL}/classes?futureOpeningDate=false&selectedStudents={student_id}")
