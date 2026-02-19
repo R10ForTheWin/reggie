@@ -295,9 +295,12 @@
       <div class="confirm-label">Promo Code</div>
       <div class="confirm-value" id="confirm-promo" style="color:var(--blue)">None</div>
     </div>
-    <label style="display:flex;align-items:center;gap:10px;margin-bottom:12px;cursor:pointer;font-size:14px;color:var(--muted)">
-      <input type="checkbox" id="dry-run-toggle" style="width:18px;height:18px;cursor:pointer">
-      Dry run (test without registering)
+    <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;cursor:pointer;font-size:14px;color:var(--muted);background:#f5f5f5;padding:12px 16px;border-radius:12px;">
+      <span>Dry run (test without registering)</span>
+      <span id="dry-run-visual" style="display:inline-block;width:44px;height:26px;background:#ccc;border-radius:13px;position:relative;transition:background .2s;flex-shrink:0;">
+        <span style="position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:transform .2s;display:block;" id="dry-run-knob"></span>
+      </span>
+      <input type="checkbox" id="dry-run-toggle" style="display:none">
     </label>
     <button class="btn btn-success" onclick="doRegister()">Register Now</button>
     <button class="btn btn-outline" onclick="show('classes')">Back</button>
@@ -350,6 +353,22 @@ function storeProfile(email, password, promo) {
   localStorage.setItem('reggie_password', password);
   localStorage.setItem('reggie_promo',    promo);
 }
+
+// ── Dry run toggle ────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const label   = document.querySelector('label[style*="dry-run"]') || document.getElementById('dry-run-visual').closest('label');
+  const toggle  = document.getElementById('dry-run-toggle');
+  const visual  = document.getElementById('dry-run-visual');
+  const knob    = document.getElementById('dry-run-knob');
+  if (label) {
+    label.addEventListener('click', e => {
+      e.preventDefault();
+      toggle.checked = !toggle.checked;
+      visual.style.background = toggle.checked ? 'var(--blue, #3b82f6)' : '#ccc';
+      knob.style.transform    = toggle.checked ? 'translateX(18px)' : 'translateX(0)';
+    });
+  }
+});
 
 // ── Setup ─────────────────────────────────────────────────────────────────
 function openSetup() {

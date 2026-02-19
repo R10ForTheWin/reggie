@@ -128,25 +128,54 @@ def _login(page, email, password):
         raise Exception("Login failed — double-check your email and password.")
 
 
+def _api_get(path, params, token):
+    """Direct HTTP call to iClassPro JWT API using a captured browser token."""
+    import json
+    import urllib.request
+    import urllib.parse
+    p = dict(params)
+    p["token"] = token
+    url = f"https://app.iclasspro.com/api/jwt/v1/{path}?{urllib.parse.urlencode(p)}"
+    req = urllib.request.Request(url, headers={
+        "Accept":  "application/json, text/plain, */*",
+        "Origin":  "https://portal.iclasspro.com",
+        "Referer": "https://portal.iclasspro.com/scaq/",
+        "User-Agent": UA,
+    })
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read())
+
+
 def get_classes(email, password, callback=None):
-    """Log in and return list of available classes + detected student ID."""
+    """Log in via browser, capture JWT token, then fetch classes via direct API."""
     def cb(msg):
         if callback:
             callback(msg)
 
-    captured = {"students": None, "classes": None}
+    captured = {"token": None}
 
     with sync_playwright() as p:
         browser, page = _new_browser(p)
 
         def on_response(resp):
             try:
-                if resp.status != 200:
+                if resp.status != 200 or captured["token"]:
                     return
-                if "/jwt/v1/students" in resp.url:
-                    captured["students"] = resp.json()
-                elif "/jwt/v1/classes?" in resp.url and "token=" in resp.url:
-                    captured["classes"] = resp.json()
+                # Capture token from login response body
+                if "/jwt/v1/login" in resp.url:
+                    data = resp.json()
+                    tok = data.get("token") or data.get("access_token")
+                    if tok:
+                        captured["token"] = tok
+                        return
+                # Fallback: grab token from any JWT API URL query param
+                if "app.iclasspro.com/api/jwt/v1/" in resp.url and "token=" in resp.url:
+                    import urllib.parse
+                    tok = urllib.parse.parse_qs(
+                        urllib.parse.urlparse(resp.url).query
+                    ).get("token", [None])[0]
+                    if tok:
+                        captured["token"] = tok
             except Exception:
                 pass
 
@@ -155,34 +184,40 @@ def get_classes(email, password, callback=None):
         cb("Logging in...")
         _login(page, email, password)
 
-        cb("Detecting your student profile...")
-        page.goto(f"{PORTAL}/enroll/select-students")
-        page.wait_for_load_state("networkidle")
-
-        student_id = None
-        if captured["students"]:
-            raw = captured["students"]
-            lst = raw.get("data") or raw.get("students") or (raw if isinstance(raw, list) else [])
-            if lst:
-                student_id = lst[0].get("id") or lst[0].get("studentId")
-
-        if not student_id:
-            raise Exception("Could not detect your student profile — please try again.")
-
-        cb("Loading available classes...")
-        page.goto(f"{PORTAL}/classes?futureOpeningDate=false&selectedStudents={student_id}")
-        page.wait_for_load_state("networkidle")
-
-        for _ in range(30):
-            if captured["classes"]:
+        # Wait briefly for token if not yet captured from login response
+        for _ in range(10):
+            if captured["token"]:
                 break
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(300)
 
         browser.close()
 
-    raw   = captured["classes"] or {}
-    lst   = raw.get("data") or raw.get("classes") or (raw if isinstance(raw, list) else [])
-    return {"classes": lst, "student_id": student_id}
+    token = captured["token"]
+    if not token:
+        raise Exception("Could not capture session token — please try again.")
+
+    # Direct API calls — no more page navigations needed
+    cb("Detecting your student profile...")
+    students_raw = _api_get("students", {}, token)
+    lst = (students_raw.get("data") or students_raw.get("students")
+           or (students_raw if isinstance(students_raw, list) else []))
+    if not lst:
+        raise Exception("Could not detect your student profile — please try again.")
+    student_id = lst[0].get("id") or lst[0].get("studentId")
+    if not student_id:
+        raise Exception("Could not detect your student profile — please try again.")
+
+    cb("Loading available classes...")
+    classes_raw = _api_get("classes", {
+        "locationId":       1,
+        "limit":            100,
+        "page":             1,
+        "students":         student_id,
+        "futureOpeningDate": "false",
+    }, token)
+    classes_lst = (classes_raw.get("data") or classes_raw.get("classes")
+                   or (classes_raw if isinstance(classes_raw, list) else []))
+    return {"classes": classes_lst, "student_id": student_id}
 
 
 def run_registration(email, password, class_id, student_id, promo_code=None, callback=None, dry_run=False):
