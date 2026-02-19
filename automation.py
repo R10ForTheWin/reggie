@@ -54,18 +54,12 @@ def _login(page, email, password):
     except Exception:
         pass
 
-    # "Are you a current customer?" → click Yes
+    # "Are you a current customer?" → click Yes, then let the app show the login form
     try:
         page.get_by_text("Yes").first.click()
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(1000)
+        page.wait_for_timeout(2500)  # Wait for modal to dismiss and login form to appear
     except Exception:
         pass
-
-    # Now go to login
-    page.goto(f"{PORTAL}/login")
-    page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(2000)
 
     try:
         email_input = page.locator('input[type="email"]:not([id="emailForgot"])')

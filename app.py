@@ -71,11 +71,9 @@ def debug_screenshot():
                 pass
             try:
                 page.get_by_text("Yes").first.click()
-                page.wait_for_load_state("networkidle")
-                page.wait_for_timeout(1000)
+                page.wait_for_timeout(2500)
             except Exception:
                 pass
-            page.goto(f"{PORTAL}/login")
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(3000)
             img_bytes = page.screenshot(full_page=True)
