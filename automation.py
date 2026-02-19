@@ -43,18 +43,21 @@ def _new_browser(p):
 
 
 def _login(page, email, password):
+    # Hit the locations page first and auto-select SCAQ
+    page.goto(f"https://portal.iclasspro.com/scaq/locations?next=https://portal.iclasspro.com/scaq")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(1500)
+    try:
+        page.get_by_text("SCAQ").first.click()
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(1000)
+    except Exception:
+        pass
+
+    # Now go to login
     page.goto(f"{PORTAL}/login")
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(2000)
-
-    # Debug: capture page title to confirm we're on the login page
-    title = page.title()
-    url   = page.url
-    if "login" not in url.lower() and "login" not in title.lower():
-        # May have been redirected — try navigating directly
-        page.goto(f"{PORTAL}/login")
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(2000)
 
     try:
         email_input = page.locator('input[type="email"]:not([id="emailForgot"])')
