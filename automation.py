@@ -47,19 +47,29 @@ def _login(page, email, password):
     page.goto(f"https://portal.iclasspro.com/scaq/locations?next=https://portal.iclasspro.com/scaq")
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(1500)
+    # Click SCAQ using role-based selector
     try:
-        page.get_by_text("SCAQ").first.click()
+        page.get_by_role("button", name=re.compile("SCAQ", re.IGNORECASE)).first.click()
         page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(1000)
+        page.wait_for_timeout(1500)
     except Exception:
-        pass
+        try:
+            page.locator('button, ion-button').filter(has_text="SCAQ").first.click()
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(1500)
+        except Exception:
+            pass
 
-    # "Are you a current customer?" → click Yes, then let the app show the login form
+    # "Are you a current customer?" → click Yes
     try:
-        page.get_by_text("Yes").first.click()
-        page.wait_for_timeout(2500)  # Wait for modal to dismiss and login form to appear
+        page.get_by_role("button", name=re.compile("^Yes$", re.IGNORECASE)).first.click()
+        page.wait_for_timeout(2500)
     except Exception:
-        pass
+        try:
+            page.locator('button, ion-button').filter(has_text=re.compile("^Yes$")).first.click()
+            page.wait_for_timeout(2500)
+        except Exception:
+            pass
 
     try:
         email_input = page.locator('input[type="email"]:not([id="emailForgot"])')

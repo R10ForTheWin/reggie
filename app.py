@@ -63,17 +63,27 @@ def debug_screenshot():
             page.goto("https://portal.iclasspro.com/scaq/locations?next=https://portal.iclasspro.com/scaq")
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(1500)
+            import re as _re
             try:
-                page.get_by_text("SCAQ").first.click()
+                page.get_by_role("button", name=_re.compile("SCAQ", _re.IGNORECASE)).first.click()
                 page.wait_for_load_state("networkidle")
-                page.wait_for_timeout(1000)
+                page.wait_for_timeout(1500)
             except Exception:
-                pass
+                try:
+                    page.locator('button, ion-button').filter(has_text="SCAQ").first.click()
+                    page.wait_for_load_state("networkidle")
+                    page.wait_for_timeout(1500)
+                except Exception:
+                    pass
             try:
-                page.get_by_text("Yes").first.click()
+                page.get_by_role("button", name=_re.compile("^Yes$", _re.IGNORECASE)).first.click()
                 page.wait_for_timeout(2500)
             except Exception:
-                pass
+                try:
+                    page.locator('button, ion-button').filter(has_text=_re.compile("^Yes$")).first.click()
+                    page.wait_for_timeout(2500)
+                except Exception:
+                    pass
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(3000)
             img_bytes = page.screenshot(full_page=True)
