@@ -100,7 +100,27 @@ def _login(page, email, password):
             except Exception:
                 pass
 
-    # "Are you a current customer?" → click Yes
+    # Home page "Log in" button
+    try:
+        page.get_by_role("button", name=re.compile("^log.in$", re.IGNORECASE)).first.click()
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(1500)
+    except Exception:
+        try:
+            page.locator('button, ion-button, ion-item, ion-card, a, [role="button"]').filter(
+                has_text=re.compile("^log.in$", re.IGNORECASE)
+            ).first.click()
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(1500)
+        except Exception:
+            try:
+                page.get_by_text(re.compile("^log.in$", re.IGNORECASE)).first.click()
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1500)
+            except Exception:
+                pass
+
+    # "Are you a current customer?" → click Yes (may still appear after Log in)
     try:
         page.get_by_role("button", name=re.compile("^Yes$", re.IGNORECASE)).first.click()
         page.wait_for_timeout(2500)
