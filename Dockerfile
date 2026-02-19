@@ -1,5 +1,5 @@
 # Uses the official Playwright image — Chromium + all deps pre-installed
-FROM mcr.microsoft.com/playwright/python:v1.50.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.58.0-jammy
 
 WORKDIR /app
 
