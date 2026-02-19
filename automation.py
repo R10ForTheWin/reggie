@@ -9,22 +9,72 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 PORTAL = "https://portal.iclasspro.com/scaq"
 
 
-def _stealth(page):
+LAUNCH_ARGS = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-blink-features=AutomationControlled",
+    "--disable-infobars",
+    "--disable-dev-shm-usage",
+]
+
+UA = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+)
+
+
+def _new_browser(p):
+    browser = p.chromium.launch(headless=True, args=LAUNCH_ARGS)
+    context = browser.new_context(
+        user_agent=UA,
+        viewport={"width": 390, "height": 844},
+        locale="en-US",
+        timezone_id="America/Los_Angeles",
+    )
+    page = context.new_page()
+    # Remove webdriver flag
+    page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     try:
         from playwright_stealth import stealth_sync
         stealth_sync(page)
-    except ImportError:
+    except Exception:
         pass
+    return browser, page
 
 
 def _login(page, email, password):
     page.goto(f"{PORTAL}/login")
     page.wait_for_load_state("networkidle")
-    page.locator('input[type="email"]:not([id="emailForgot"])').first.fill(email)
+    page.wait_for_timeout(2000)
+
+    # Debug: capture page title to confirm we're on the login page
+    title = page.title()
+    url   = page.url
+    if "login" not in url.lower() and "login" not in title.lower():
+        # May have been redirected — try navigating directly
+        page.goto(f"{PORTAL}/login")
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(2000)
+
+    try:
+        page.locator('input[type="email"]:not([id="emailForgot"])').first.fill(
+            email, timeout=45000
+        )
+    except PlaywrightTimeout:
+        # Save screenshot for debugging and raise a clear error
+        try:
+            page.screenshot(path="/tmp/reggie_login_debug.png", full_page=True)
+        except Exception:
+            pass
+        raise Exception(
+            f"Could not find login form (page: {page.url}). "
+            "PerimeterX may be blocking the server — try again in a moment."
+        )
+
     page.locator('input[type="password"]').first.fill(password)
     page.locator('button[type="submit"]').first.click()
     try:
-        page.wait_for_url("**/scaq/dashboard**", timeout=20000)
+        page.wait_for_url("**/scaq/dashboard**", timeout=30000)
     except PlaywrightTimeout:
         raise Exception("Login failed — double-check your email and password.")
 
@@ -38,10 +88,7 @@ def get_classes(email, password, callback=None):
     captured = {"students": None, "classes": None}
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context()
-        page    = context.new_page()
-        _stealth(page)
+        browser, page = _new_browser(p)
 
         def on_response(resp):
             try:
@@ -99,10 +146,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
     captured = {"cart_item": None}
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context()
-        page    = context.new_page()
-        _stealth(page)
+        browser, page = _new_browser(p)
 
         def on_response(resp):
             try:
