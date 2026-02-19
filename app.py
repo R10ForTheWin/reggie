@@ -51,7 +51,7 @@ def ping():
 
 @app.route("/snap")
 def debug_screenshot():
-    """Take a screenshot of what Playwright sees on the login page."""
+    """Replicate the exact automation flow and screenshot the login page."""
     import io
     from flask import send_file
     from playwright.sync_api import sync_playwright
@@ -59,6 +59,16 @@ def debug_screenshot():
     try:
         with sync_playwright() as p:
             browser, page = _new_browser(p)
+            # Replicate exact automation flow
+            page.goto("https://portal.iclasspro.com/scaq/locations?next=https://portal.iclasspro.com/scaq")
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(1500)
+            try:
+                page.get_by_text("SCAQ").first.click()
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1000)
+            except Exception:
+                pass
             page.goto(f"{PORTAL}/login")
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(3000)
