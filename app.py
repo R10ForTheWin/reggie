@@ -94,6 +94,25 @@ def debug_screenshot():
                         page.wait_for_timeout(1500)
                     except Exception:
                         pass
+            # "Welcome Info / Got It!" modal
+            try:
+                page.get_by_role("button", name=_re.compile("got.it", _re.IGNORECASE)).first.click()
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1500)
+            except Exception:
+                try:
+                    page.locator('button, ion-button, ion-item, ion-card, a, [role="button"]').filter(
+                        has_text=_re.compile("got.it", _re.IGNORECASE)
+                    ).first.click()
+                    page.wait_for_load_state("networkidle")
+                    page.wait_for_timeout(1500)
+                except Exception:
+                    try:
+                        page.get_by_text(_re.compile("got.it", _re.IGNORECASE)).first.click()
+                        page.wait_for_load_state("networkidle")
+                        page.wait_for_timeout(1500)
+                    except Exception:
+                        pass
             try:
                 page.get_by_role("button", name=_re.compile("^Yes$", _re.IGNORECASE)).first.click()
                 page.wait_for_timeout(2500)
