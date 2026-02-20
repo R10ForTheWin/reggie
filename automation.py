@@ -15,7 +15,7 @@ import json
 import os
 
 _cache_lock = threading.Lock()
-_TOKEN_TTL  = 604800  # 7 days
+_TOKEN_TTL  = 2592000  # 30 days
 _CACHE_DIR  = "/tmp/reggie_cache"
 
 
