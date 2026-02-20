@@ -29,6 +29,25 @@ def _invalidate_token(email):
     with _token_cache_lock:
         _token_cache.pop(email, None)
 
+# Browser session state cache (cookies) — lets run_registration skip login
+_session_cache      = {}
+_session_cache_lock = threading.Lock()
+
+def _get_cached_session(email):
+    with _session_cache_lock:
+        entry = _session_cache.get(email)
+        if entry and entry["expires_at"] > time.time():
+            return entry["state"]
+    return None
+
+def _cache_session(email, state):
+    with _session_cache_lock:
+        _session_cache[email] = {"state": state, "expires_at": time.time() + _TOKEN_TTL}
+
+def _invalidate_session(email):
+    with _session_cache_lock:
+        _session_cache.pop(email, None)
+
 PORTAL = "https://portal.iclasspro.com/scaq"
 
 
@@ -46,23 +65,25 @@ UA = (
 )
 
 
-def _new_browser(p):
+def _new_browser(p, storage_state=None):
     browser = p.chromium.launch(headless=True, args=LAUNCH_ARGS)
-    context = browser.new_context(
+    ctx_kw = dict(
         user_agent=UA,
         viewport={"width": 390, "height": 844},
         locale="en-US",
         timezone_id="America/Los_Angeles",
     )
+    if storage_state:
+        ctx_kw["storage_state"] = storage_state
+    context = browser.new_context(**ctx_kw)
     page = context.new_page()
-    # Remove webdriver flag
     page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     try:
         from playwright_stealth import stealth_sync
         stealth_sync(page)
     except Exception:
         pass
-    return browser, page
+    return browser, context, page
 
 
 def _click_first(page, text_re, timeout=5000):
@@ -170,11 +191,11 @@ def _api_get(path, params, token):
 
 
 def _browser_get_token(email, password, cb):
-    """Launch browser, log in, capture and return the JWT token."""
+    """Launch browser, log in, capture JWT token and save session state."""
     captured = {"token": None}
 
     with sync_playwright() as p:
-        browser, page = _new_browser(p)
+        browser, context, page = _new_browser(p)
 
         def on_response(resp):
             try:
@@ -203,6 +224,12 @@ def _browser_get_token(email, password, cb):
             if captured["token"]:
                 break
             page.wait_for_timeout(300)
+
+        # Save browser session so run_registration can skip login
+        try:
+            _cache_session(email, context.storage_state())
+        except Exception:
+            pass
 
         browser.close()
 
@@ -264,8 +291,17 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
     captured = {"cart_item": None}
 
+    enroll_url = (
+        f"{PORTAL}/enroll/new-cart-item"
+        f"?objectId={class_id}"
+        f"&bookingType=classEnroll"
+        f"&selectedStudents={student_id}"
+        f"&open"
+    )
+
     with sync_playwright() as p:
-        browser, page = _new_browser(p)
+        cached_state = _get_cached_session(email)
+        browser, context, page = _new_browser(p, storage_state=cached_state)
 
         def on_response(resp):
             try:
@@ -279,28 +315,43 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
         page.on("response", on_response)
 
-        cb("Logging in...")
-        try:
-            _login(page, email, password)
-        except Exception:
-            _invalidate_token(email)  # force fresh login next time
-            raise
-
-        cb("Opening enrollment page...")
-        enroll_url = (
-            f"{PORTAL}/enroll/new-cart-item"
-            f"?objectId={class_id}"
-            f"&bookingType=classEnroll"
-            f"&selectedStudents={student_id}"
-            f"&open"
-        )
-        page.goto(enroll_url)
-        page.wait_for_load_state("networkidle")
+        if cached_state:
+            # Try jumping straight to the enrollment page
+            cb("Opening enrollment page...")
+            page.goto(enroll_url)
+            page.wait_for_load_state("networkidle")
+            # If the session expired the portal redirects us away from /enroll
+            if "/enroll" not in page.url:
+                cb("Session expired — logging in again...")
+                _invalidate_token(email)
+                _invalidate_session(email)
+                _login(page, email, password)
+                try:
+                    _cache_session(email, context.storage_state())
+                except Exception:
+                    pass
+                page.goto(enroll_url)
+                page.wait_for_load_state("networkidle")
+        else:
+            cb("Logging in...")
+            try:
+                _login(page, email, password)
+                try:
+                    _cache_session(email, context.storage_state())
+                except Exception:
+                    pass
+            except Exception:
+                _invalidate_token(email)
+                _invalidate_session(email)
+                raise
+            cb("Opening enrollment page...")
+            page.goto(enroll_url)
+            page.wait_for_load_state("networkidle")
 
         for _ in range(20):
             if captured["cart_item"]:
                 break
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(300)
 
         cb("Selecting start date...")
         cart_data = captured["cart_item"] or {}
@@ -313,7 +364,6 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             date_val = dates[0].get("startDate") or dates[0].get("date") or str(dates[0])
             try:
                 page.get_by_text(date_val).first.click()
-                page.wait_for_timeout(400)
             except Exception:
                 try:
                     page.locator('[class*="date"], [class*="start"]').first.click()
@@ -331,7 +381,6 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             raise Exception("Could not add to cart — you may already be enrolled in this class.")
 
         page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(2000)
 
         if promo_code:
             cb(f"Applying promo code {promo_code}...")
@@ -345,7 +394,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     "button",
                     name=re.compile(r"apply|add|submit", re.IGNORECASE)
                 ).first.click()
-                page.wait_for_timeout(1500)
+                page.wait_for_load_state("networkidle")
             except Exception as e:
                 cb(f"Note: could not auto-apply promo code ({e})")
 
