@@ -10,43 +10,91 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 
 # ── Token cache ────────────────────────────────────────────────────────────
 # Stores JWT tokens per email so repeat loads skip the browser login entirely.
-_token_cache      = {}   # email -> {"token": str, "expires_at": float}
-_token_cache_lock = threading.Lock()
-_TOKEN_TTL        = 3600  # 1 hour
+import hashlib
+import json
+import os
+
+_cache_lock = threading.Lock()
+_TOKEN_TTL  = 82800  # 23 hours — covers a full day's use
+_CACHE_DIR  = "/tmp/reggie_cache"
+
+
+def _cache_key(email):
+    return hashlib.sha256(email.lower().encode()).hexdigest()[:16]
+
+
+def _load_cache(email):
+    try:
+        path = os.path.join(_CACHE_DIR, _cache_key(email) + ".json")
+        with open(path) as f:
+            entry = json.load(f)
+        if entry.get("expires_at", 0) > time.time():
+            return entry
+    except Exception:
+        pass
+    return None
+
+
+def _save_cache(email, data):
+    try:
+        os.makedirs(_CACHE_DIR, exist_ok=True)
+        path = os.path.join(_CACHE_DIR, _cache_key(email) + ".json")
+        data["expires_at"] = time.time() + _TOKEN_TTL
+        with open(path, "w") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
+
+def _invalidate_cache(email):
+    try:
+        path = os.path.join(_CACHE_DIR, _cache_key(email) + ".json")
+        os.remove(path)
+    except Exception:
+        pass
+
 
 def _get_cached_token(email):
-    with _token_cache_lock:
-        entry = _token_cache.get(email)
-        if entry and entry["expires_at"] > time.time():
-            return entry["token"]
-    return None
+    with _cache_lock:
+        entry = _load_cache(email)
+        return entry.get("token") if entry else None
+
 
 def _cache_token(email, token):
-    with _token_cache_lock:
-        _token_cache[email] = {"token": token, "expires_at": time.time() + _TOKEN_TTL}
+    with _cache_lock:
+        entry = _load_cache(email) or {}
+        entry["token"] = token
+        _save_cache(email, entry)
+
 
 def _invalidate_token(email):
-    with _token_cache_lock:
-        _token_cache.pop(email, None)
+    # Just clear the token field, keep session state
+    with _cache_lock:
+        entry = _load_cache(email)
+        if entry:
+            entry.pop("token", None)
+            _save_cache(email, entry)
 
-# Browser session state cache (cookies) — lets run_registration skip login
-_session_cache      = {}
-_session_cache_lock = threading.Lock()
 
 def _get_cached_session(email):
-    with _session_cache_lock:
-        entry = _session_cache.get(email)
-        if entry and entry["expires_at"] > time.time():
-            return entry["state"]
-    return None
+    with _cache_lock:
+        entry = _load_cache(email)
+        return entry.get("session") if entry else None
+
 
 def _cache_session(email, state):
-    with _session_cache_lock:
-        _session_cache[email] = {"state": state, "expires_at": time.time() + _TOKEN_TTL}
+    with _cache_lock:
+        entry = _load_cache(email) or {}
+        entry["session"] = state
+        _save_cache(email, entry)
+
 
 def _invalidate_session(email):
-    with _session_cache_lock:
-        _session_cache.pop(email, None)
+    with _cache_lock:
+        entry = _load_cache(email)
+        if entry:
+            entry.pop("session", None)
+            _save_cache(email, entry)
 
 PORTAL = "https://portal.iclasspro.com/scaq"
 
