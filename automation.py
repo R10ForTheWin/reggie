@@ -448,7 +448,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     'input[placeholder*="promo" i], input[placeholder*="coupon" i], '
                     'input[placeholder*="code" i], input[name*="promo" i], input[name*="coupon" i]'
                 ).first
-                promo_input.fill(promo_code)
+                promo_input.fill(promo_code, timeout=3000)
                 page.get_by_role(
                     "button",
                     name=re.compile(r"apply|add|submit", re.IGNORECASE)

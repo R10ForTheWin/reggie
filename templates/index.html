@@ -250,7 +250,7 @@
       <button class="edit-link" onclick="openSetup()">Edit</button>
     </div>
     <button class="btn btn-primary btn-lg" onclick="startFindClasses()">Select a Pool</button>
-    <button class="btn btn-outline" id="share-btn" onclick="shareApp()" style="margin-top:12px">Share with Teammates</button>
+    <button class="btn btn-outline" id="share-btn" onclick="shareApp()" style="margin-top:12px">Share App with Teammates</button>
     <p class="note" style="margin-top:20px">Tap to browse open practices and register instantly</p>
   </div>
 </div>
@@ -297,7 +297,7 @@
       <div class="confirm-value" id="confirm-promo" style="color:var(--blue)">None</div>
     </div>
     <label id="dry-run-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;cursor:pointer;font-size:14px;color:var(--muted);background:#f5f5f5;padding:12px 16px;border-radius:12px;">
-      <span>Dry run (test without registering)</span>
+      <span>Ignore this toggle. It's for test runs to troubleshoot the app</span>
       <span id="dry-run-visual" style="display:inline-block;width:44px;height:26px;background:#ccc;border-radius:13px;position:relative;transition:background .2s;flex-shrink:0;">
         <span style="position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:transform .2s;display:block;" id="dry-run-knob"></span>
       </span>
@@ -607,7 +607,7 @@ function shareApp() {
   } else {
     navigator.clipboard.writeText(url).then(() => {
       btn.textContent = 'Link copied!';
-      setTimeout(() => { btn.textContent = 'Share with Teammates'; }, 2000);
+      setTimeout(() => { btn.textContent = 'Share App with Teammates'; }, 2000);
     });
   }
 }
