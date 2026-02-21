@@ -452,14 +452,8 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     page.wait_for_timeout(800)
                 except Exception:
                     pass
-                # Find the promo input by its label or as the last visible text input
-                promo_input = page.get_by_label(
-                    re.compile(r"promo.?code", re.IGNORECASE)
-                ).first
-                if not promo_input.is_visible(timeout=2000):
-                    promo_input = page.locator(
-                        'input[type="text"], input:not([type="password"]):not([type="email"])'
-                    ).last
+                # The promo input is a plain text input that appears after clicking the link
+                promo_input = page.locator('input[type="text"]').last
                 promo_input.fill(promo_code, timeout=4000)
                 promo_input.press("Enter")
                 page.wait_for_load_state("networkidle")
