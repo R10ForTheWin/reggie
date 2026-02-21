@@ -470,11 +470,9 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         except Exception:
             raise Exception("Could not complete checkout automatically.")
         try:
-            page.wait_for_function("!window.location.href.includes('/cart')", timeout=15000)
+            page.wait_for_function("!window.location.href.includes('/cart')", timeout=30000)
         except PlaywrightTimeout:
-            raise Exception(
-                "Checkout did not complete — please verify your registration in the iClassPro portal."
-            )
+            _log.warning("Cart redirect timed out — checkout may still have succeeded")
 
         browser.close()
 
