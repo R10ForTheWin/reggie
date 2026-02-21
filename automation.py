@@ -444,11 +444,21 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         if promo_code:
             cb(f"Applying promo code {promo_code}...")
             try:
+                # Cart pages often hide the promo field behind a "Have a promo code?" link
+                try:
+                    page.locator(
+                        'button, a, ion-item, ion-button, [role="button"]'
+                    ).filter(
+                        has_text=re.compile(r"promo|coupon|discount|code", re.IGNORECASE)
+                    ).first.click(timeout=3000)
+                    page.wait_for_timeout(600)
+                except Exception:
+                    pass
                 promo_input = page.locator(
                     'input[placeholder*="promo" i], input[placeholder*="coupon" i], '
                     'input[placeholder*="code" i], input[name*="promo" i], input[name*="coupon" i]'
                 ).first
-                promo_input.fill(promo_code, timeout=3000)
+                promo_input.fill(promo_code, timeout=4000)
                 page.get_by_role(
                     "button",
                     name=re.compile(r"apply|add|submit", re.IGNORECASE)
