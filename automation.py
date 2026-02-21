@@ -357,8 +357,13 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
         def on_response(resp):
             try:
-                if "app.iclasspro.com/api/jwt/v1/" in resp.url:
-                    _log.info("API [%s] %s", resp.status, resp.url)
+                if "iclasspro.com" in resp.url:
+                    _log.info("API [%s] [%s] %s", resp.request.method, resp.status, resp.url)
+                    if resp.request.method in ("POST", "PUT", "PATCH"):
+                        try:
+                            _log.info("API body: %s", resp.json())
+                        except Exception:
+                            pass
                 if resp.status != 200:
                     return
                 if ("/jwt/v1/new-cart-item/class-enrollment/" in resp.url
