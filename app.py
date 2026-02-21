@@ -2,11 +2,14 @@
 Reggie – Flask web app
 """
 
+import logging
 import os
 import re as _re
 import threading
 import time
 import uuid
+
+logging.basicConfig(level=logging.INFO)
 
 from flask import Flask, jsonify, redirect, render_template, request
 
