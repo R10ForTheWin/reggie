@@ -312,7 +312,7 @@
 <div class="screen" id="screen-success">
   <div class="center-screen">
     <div id="success-video-wrap" style="display:none;width:100%;max-width:360px;margin-bottom:20px;border-radius:16px;overflow:hidden;">
-      <video id="success-video" src="/static/success.mp4" muted playsinline style="width:100%;display:block;"></video>
+      <video id="success-video" src="/static/success.mp4" autoplay muted playsinline preload="auto" style="width:100%;display:block;"></video>
     </div>
     <div class="result-icon" id="success-icon">✅</div>
     <div class="result-title">You're In!</div>
@@ -566,6 +566,7 @@ async function doRegister() {
           const wrap = document.getElementById('success-video-wrap');
           wrap.style.display = 'block';
           const video = document.getElementById('success-video');
+          video.load();
           video.currentTime = 0;
           video.play().catch(() => {});
           document.getElementById('success-msg').textContent =
@@ -582,6 +583,7 @@ async function doRegister() {
           const wrap = document.getElementById('success-video-wrap');
           wrap.style.display = 'block';
           const video = document.getElementById('success-video');
+          video.load();
           video.currentTime = 0;
           video.play().catch(() => {});
         }
