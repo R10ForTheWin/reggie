@@ -39,6 +39,7 @@ def security_headers(response):
         "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
+        "media-src 'self'; "
         "connect-src 'self'; "
         "worker-src 'self';"
     )

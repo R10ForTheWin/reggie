@@ -423,10 +423,10 @@ function esc(str) {
 
 // ── Job polling ───────────────────────────────────────────────────────────
 async function pollJob(jobId, onProgress, onDone, onError) {
-  const MAX_POLLS = 240; // 4 minutes max
+  const MAX_POLLS = 480; // 4 minutes max at 500ms intervals
   let polls = 0;
   while (polls++ < MAX_POLLS) {
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 500));
     try {
       const res = await fetch('/api/job/' + jobId);
       const job = await res.json();

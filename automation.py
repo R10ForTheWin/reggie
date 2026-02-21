@@ -3,17 +3,16 @@ Reggie – Playwright automation functions
 Called by app.py in background threads.
 """
 
+import hashlib
+import json
 import logging
+import os
 import re
 import threading
 import time
+import urllib.parse
+import urllib.request
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
-
-# ── Token cache ────────────────────────────────────────────────────────────
-# Stores JWT tokens per email so repeat loads skip the browser login entirely.
-import hashlib
-import json
-import os
 
 _log = logging.getLogger(__name__)
 
@@ -162,26 +161,27 @@ def _click_first(page, text_re, timeout=5000):
 
 def _login(page, email, password):
     # Locations page → select SCAQ
+    # domcontentloaded is enough — _click_first waits for the element itself
     page.goto("https://portal.iclasspro.com/scaq/locations?next=https://portal.iclasspro.com/scaq")
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
     _click_first(page, re.compile("SCAQ", re.IGNORECASE))
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
 
     # "Click to begin" interstitial
     _click_first(page, re.compile(r"click.to.begin", re.IGNORECASE))
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
 
     # "Welcome Info" → Got It
     _click_first(page, re.compile(r"got.it", re.IGNORECASE))
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
 
     # Go directly to login page (location session already set)
     page.goto(f"{PORTAL}/login")
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("networkidle")  # keep — need Angular form to render
 
     # "Are you a current customer?" → Yes
     _click_first(page, re.compile(r"^Yes$", re.IGNORECASE))
-    page.wait_for_timeout(1500)
+    # No sleep — email input wait below handles timing
 
     # Fill email
     try:
@@ -189,7 +189,7 @@ def _login(page, email, password):
         email_input.first.wait_for(state="attached", timeout=60000)
         email_input.first.click()
         email_input.first.fill("")
-        email_input.first.press_sequentially(email, delay=20)
+        email_input.first.press_sequentially(email, delay=10)
     except PlaywrightTimeout:
         raise Exception(
             f"Could not find login form (page: {page.url}). "
@@ -200,8 +200,8 @@ def _login(page, email, password):
     pwd_input = page.locator('input[type="password"]').first
     pwd_input.click()
     pwd_input.fill("")
-    pwd_input.press_sequentially(password, delay=20)
-    page.wait_for_timeout(300)
+    pwd_input.press_sequentially(password, delay=10)
+    # No sleep — click Next immediately
     # The visible submit is the "Next" nav button; the form's button[type=submit] is hidden
     submitted = False
     try:
@@ -228,9 +228,6 @@ def _login(page, email, password):
 
 def _api_get(path, params, token):
     """Direct HTTP call to iClassPro JWT API using a captured browser token."""
-    import json
-    import urllib.request
-    import urllib.parse
     p = dict(params)
     p["token"] = token
     url = f"https://app.iclasspro.com/api/jwt/v1/{path}?{urllib.parse.urlencode(p)}"
@@ -262,7 +259,6 @@ def _browser_get_token(email, password, cb):
                         captured["token"] = tok
                         return
                 if "app.iclasspro.com/api/jwt/v1/" in resp.url and "token=" in resp.url:
-                    import urllib.parse
                     tok = urllib.parse.parse_qs(
                         urllib.parse.urlparse(resp.url).query
                     ).get("token", [None])[0]
@@ -362,12 +358,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         def on_response(resp):
             try:
                 if "app.iclasspro.com/api/jwt/v1/" in resp.url:
-                    try:
-                        body = resp.json()
-                    except Exception:
-                        body = {}
-                    _log.info("API response [%s] %s => keys:%s",
-                              resp.status, resp.url, list(body.keys()) if isinstance(body, dict) else type(body).__name__)
+                    _log.info("API [%s] %s", resp.status, resp.url)
                 if resp.status != 200:
                     return
                 if ("/jwt/v1/new-cart-item/class-enrollment/" in resp.url
@@ -411,10 +402,10 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             page.goto(enroll_url)
             page.wait_for_load_state("networkidle")
 
-        for _ in range(20):
+        for _ in range(60):
             if captured["cart_item"]:
                 break
-            page.wait_for_timeout(300)
+            page.wait_for_timeout(100)
 
         cb("Selecting start date...")
         cart_data = captured["cart_item"] or {}
@@ -443,7 +434,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         except Exception:
             raise Exception("Could not add to cart — you may already be enrolled in this class.")
 
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
 
         if promo_code:
             cb(f"Applying promo code {promo_code}...")
