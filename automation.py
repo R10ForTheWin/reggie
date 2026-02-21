@@ -452,15 +452,16 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     page.wait_for_timeout(800)
                 except Exception:
                     pass
-                promo_input = page.locator(
-                    'input[placeholder*="promo" i], input[placeholder*="coupon" i], '
-                    'input[placeholder*="code" i], input[name*="promo" i], input[name*="coupon" i]'
+                # Find the promo input by its label or as the last visible text input
+                promo_input = page.get_by_label(
+                    re.compile(r"promo.?code", re.IGNORECASE)
                 ).first
+                if not promo_input.is_visible(timeout=2000):
+                    promo_input = page.locator(
+                        'input[type="text"], input:not([type="password"]):not([type="email"])'
+                    ).last
                 promo_input.fill(promo_code, timeout=4000)
-                page.get_by_role(
-                    "button",
-                    name=re.compile(r"apply|add|submit", re.IGNORECASE)
-                ).first.click()
+                promo_input.press("Enter")
                 page.wait_for_load_state("networkidle")
             except Exception as e:
                 promo_warning = f"Promo code '{promo_code}' could not be applied automatically — add it manually if needed."
