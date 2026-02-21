@@ -142,10 +142,14 @@ def api_classes():
     jid = _create_job()
 
     def run():
-        if not _browser_lock.acquire(timeout=15):
-            _update(jid, status="error",
-                    message="Another job is already running — please wait a moment and try again.")
-            return
+        waited = 0
+        while not _browser_lock.acquire(timeout=5):
+            waited += 5
+            if waited >= 120:
+                _update(jid, status="error",
+                        message="Server is too busy right now — please try again in a moment.")
+                return
+            _update(jid, message=f"Server is busy, waiting... ({waited}s)")
         try:
             from automation import get_classes
             _update(jid, message="Logging in...")
@@ -182,10 +186,14 @@ def api_register():
     jid = _create_job()
 
     def run():
-        if not _browser_lock.acquire(timeout=15):
-            _update(jid, status="error",
-                    message="Another job is already running — please wait a moment and try again.")
-            return
+        waited = 0
+        while not _browser_lock.acquire(timeout=5):
+            waited += 5
+            if waited >= 120:
+                _update(jid, status="error",
+                        message="Server is too busy right now — please try again in a moment.")
+                return
+            _update(jid, message=f"Server is busy, waiting... ({waited}s)")
         try:
             from automation import run_registration
             result = run_registration(email, password, class_id, student_id,

@@ -250,6 +250,7 @@
       <button class="edit-link" onclick="openSetup()">Edit</button>
     </div>
     <button class="btn btn-primary btn-lg" onclick="startFindClasses()">Select a Pool</button>
+    <button class="btn btn-outline" id="share-btn" onclick="shareApp()" style="margin-top:12px">Share with Teammates</button>
     <p class="note" style="margin-top:20px">Tap to browse open practices and register instantly</p>
   </div>
 </div>
@@ -594,6 +595,20 @@ async function doRegister() {
   } catch (err) {
     document.getElementById('error-msg').textContent = err.message;
     show('error');
+  }
+}
+
+// ── Share ─────────────────────────────────────────────────────────────────
+function shareApp() {
+  const url = 'https://reggie-tcwk.onrender.com';
+  const btn = document.getElementById('share-btn');
+  if (navigator.share) {
+    navigator.share({ title: 'Reggie', text: 'Register for SCAQ practice fast!', url });
+  } else {
+    navigator.clipboard.writeText(url).then(() => {
+      btn.textContent = 'Link copied!';
+      setTimeout(() => { btn.textContent = 'Share with Teammates'; }, 2000);
+    });
   }
 }
 
