@@ -3,6 +3,7 @@
   "short_name": "Reggie",
   "description": "Fast swim practice registration helper",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#03045E",
   "theme_color": "#0077B6",

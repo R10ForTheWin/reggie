@@ -262,6 +262,7 @@
       <span></span><span></span><span></span><span></span><span></span>
     </div>
     <div class="status-text" id="loading-msg">Loading...</div>
+    <p class="note" style="margin-top:18px">First login takes ~90 seconds.<br>Much faster after that.</p>
   </div>
 </div>
 
@@ -295,7 +296,7 @@
       <div class="confirm-label">Promo Code</div>
       <div class="confirm-value" id="confirm-promo" style="color:var(--blue)">None</div>
     </div>
-    <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;cursor:pointer;font-size:14px;color:var(--muted);background:#f5f5f5;padding:12px 16px;border-radius:12px;">
+    <label id="dry-run-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;cursor:pointer;font-size:14px;color:var(--muted);background:#f5f5f5;padding:12px 16px;border-radius:12px;">
       <span>Dry run (test without registering)</span>
       <span id="dry-run-visual" style="display:inline-block;width:44px;height:26px;background:#ccc;border-radius:13px;position:relative;transition:background .2s;flex-shrink:0;">
         <span style="position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:transform .2s;display:block;" id="dry-run-knob"></span>
@@ -310,9 +311,13 @@
 <!-- ══════════════════════════════════════════ SUCCESS -->
 <div class="screen" id="screen-success">
   <div class="center-screen">
-    <div class="result-icon">✅</div>
+    <div id="success-video-wrap" style="display:none;width:100%;max-width:360px;margin-bottom:20px;border-radius:16px;overflow:hidden;">
+      <video id="success-video" src="/static/success.mp4" muted playsinline style="width:100%;display:block;"></video>
+    </div>
+    <div class="result-icon" id="success-icon">✅</div>
     <div class="result-title">You're In!</div>
     <div class="result-msg" id="success-msg">Registration complete</div>
+    <p id="success-tagline" style="font-size:18px;font-weight:600;color:var(--blue);margin-bottom:24px;display:none;">See you there, you sexy Mer-man</p>
     <button class="btn btn-primary result-btn" onclick="show('home')">Done</button>
   </div>
 </div>
@@ -356,7 +361,7 @@ function storeProfile(email, password, promo) {
 
 // ── Dry run toggle ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  const label   = document.querySelector('label[style*="dry-run"]') || document.getElementById('dry-run-visual').closest('label');
+  const label   = document.getElementById('dry-run-label');
   const toggle  = document.getElementById('dry-run-toggle');
   const visual  = document.getElementById('dry-run-visual');
   const knob    = document.getElementById('dry-run-knob');
@@ -555,11 +560,25 @@ async function doRegister() {
       msg => { document.getElementById('loading-msg').textContent = msg; },
       result => {
         if (result && result.dry_run) {
+          document.getElementById('success-icon').style.display = 'block';
+          document.getElementById('success-video-wrap').style.display = 'none';
+          document.getElementById('success-tagline').style.display = 'none';
           document.getElementById('success-msg').textContent =
             'Dry run complete! Everything worked up to checkout — no registration was submitted.';
         } else {
           const name = selectedClass.className || selectedClass.name || 'your class';
-          document.getElementById('success-msg').textContent = `Registered for ${name}!`;
+          let msg = `Registered for ${name}!`;
+          if (result && result.promo_warning) {
+            msg += ` Note: ${result.promo_warning}`;
+          }
+          document.getElementById('success-msg').textContent = msg;
+          document.getElementById('success-icon').style.display = 'none';
+          document.getElementById('success-tagline').style.display = 'block';
+          const wrap = document.getElementById('success-video-wrap');
+          wrap.style.display = 'block';
+          const video = document.getElementById('success-video');
+          video.currentTime = 0;
+          video.play().catch(() => {});
         }
         show('success');
       },

@@ -1,0 +1,12 @@
+.git
+.gitignore
+*.md
+__pycache__
+*.pyc
+*.pyo
+.env
+.env.*
+/tmp
+check_classes.py
+reggie.py
+record_flow.py

@@ -3,6 +3,7 @@ Reggie – Flask web app
 """
 
 import os
+import re as _re
 import threading
 import time
 import uuid
@@ -30,6 +31,14 @@ def security_headers(response):
     response.headers["X-Frame-Options"]        = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "worker-src 'self';"
+    )
     return response
 
 
@@ -86,7 +95,7 @@ def debug_screenshot():
     from automation import _new_browser
     try:
         with sync_playwright() as p:
-            browser, page = _new_browser(p)
+            browser, _ctx, page = _new_browser(p)
             page.goto("https://portal.iclasspro.com/scaq/locations?next=https://portal.iclasspro.com/scaq")
             page.wait_for_load_state("networkidle")
             for text in [_re.compile("SCAQ", _re.IGNORECASE),
@@ -161,6 +170,10 @@ def api_register():
 
     if not all([email, password, class_id, student_id]):
         return jsonify({"error": "Missing required fields"}), 400
+    if not _re.match(r'^\d+$', str(class_id)):
+        return jsonify({"error": "Invalid class_id"}), 400
+    if not _re.match(r'^\d+$', str(student_id)):
+        return jsonify({"error": "Invalid student_id"}), 400
 
     jid = _create_job()
 
@@ -180,8 +193,9 @@ def api_register():
                         message="Dry run complete — everything worked up to checkout!",
                         result={"dry_run": True})
             else:
+                result_data = result if isinstance(result, dict) else {}
                 _update(jid, status="done", message="Registration complete!",
-                        result={"dry_run": False})
+                        result={"dry_run": False, **result_data})
         except Exception as e:
             _update(jid, status="error", message=_safe_error(e))
         finally:
@@ -205,6 +219,7 @@ _SAFE_ERRORS = (
     "already enrolled",
     "Could not add to cart",
     "Could not complete checkout",
+    "Checkout did not complete",
     "Could not detect your student profile",
     "Another job is already running",
 )

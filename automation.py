@@ -3,6 +3,7 @@ Reggie – Playwright automation functions
 Called by app.py in background threads.
 """
 
+import logging
 import re
 import threading
 import time
@@ -14,13 +15,15 @@ import hashlib
 import json
 import os
 
+_log = logging.getLogger(__name__)
+
 _cache_lock = threading.Lock()
 _TOKEN_TTL  = 2592000  # 30 days
 _CACHE_DIR  = "/tmp/reggie_cache"
 
 
 def _cache_key(email):
-    return hashlib.sha256(email.lower().encode()).hexdigest()[:16]
+    return hashlib.sha256(email.lower().encode()).hexdigest()
 
 
 def _load_cache(email):
@@ -42,6 +45,7 @@ def _save_cache(email, data):
         data["expires_at"] = time.time() + _TOKEN_TTL
         with open(path, "w") as f:
             json.dump(data, f)
+        os.chmod(path, 0o600)
     except Exception:
         pass
 
@@ -150,8 +154,10 @@ def _click_first(page, text_re, timeout=5000):
         pass
     try:
         page.get_by_text(text_re).first.click(timeout=timeout)
+        return
     except Exception:
         pass
+    _log.warning("_click_first: no element found for %r on %s", text_re, page.url)
 
 
 def _login(page, email, password):
@@ -273,11 +279,12 @@ def _browser_get_token(email, password, cb):
                 break
             page.wait_for_timeout(300)
 
-        # Save browser session so run_registration can skip login
-        try:
-            _cache_session(email, context.storage_state())
-        except Exception:
-            pass
+        # Only save session if login produced a valid token
+        if captured["token"]:
+            try:
+                _cache_session(email, context.storage_state())
+            except Exception:
+                pass
 
         browser.close()
 
@@ -337,7 +344,8 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         if callback:
             callback(msg)
 
-    captured = {"cart_item": None}
+    captured    = {"cart_item": None}
+    promo_warning = None
 
     enroll_url = (
         f"{PORTAL}/enroll/new-cart-item"
@@ -368,8 +376,8 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             cb("Opening enrollment page...")
             page.goto(enroll_url)
             page.wait_for_load_state("networkidle")
-            # If the session expired the portal redirects us away from /enroll
-            if "/enroll" not in page.url:
+            # If the session expired the portal redirects to login
+            if "/login" in page.url:
                 cb("Session expired — logging in again...")
                 _invalidate_token(email)
                 _invalidate_session(email)
@@ -444,7 +452,9 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 ).first.click()
                 page.wait_for_load_state("networkidle")
             except Exception as e:
-                cb(f"Note: could not auto-apply promo code ({e})")
+                promo_warning = f"Promo code '{promo_code}' could not be applied automatically — add it manually if needed."
+                _log.warning("promo code apply failed: %s", e)
+                cb(f"Note: {promo_warning}")
 
         if dry_run:
             cb("Dry run complete — stopping before checkout.")
@@ -457,10 +467,15 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 "button",
                 name=re.compile(r"checkout|process|submit|pay|complete|confirm", re.IGNORECASE)
             ).first.click()
-            page.wait_for_timeout(4000)
         except Exception:
             raise Exception("Could not complete checkout automatically.")
+        try:
+            page.wait_for_function("!window.location.href.includes('/cart')", timeout=15000)
+        except PlaywrightTimeout:
+            raise Exception(
+                "Checkout did not complete — please verify your registration in the iClassPro portal."
+            )
 
         browser.close()
 
-    return True
+    return {"promo_warning": promo_warning}
