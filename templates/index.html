@@ -560,9 +560,13 @@ async function doRegister() {
       msg => { document.getElementById('loading-msg').textContent = msg; },
       result => {
         if (result && result.dry_run) {
-          document.getElementById('success-icon').style.display = 'block';
-          document.getElementById('success-video-wrap').style.display = 'none';
-          document.getElementById('success-tagline').style.display = 'none';
+          document.getElementById('success-icon').style.display = 'none';
+          document.getElementById('success-tagline').style.display = 'block';
+          const wrap = document.getElementById('success-video-wrap');
+          wrap.style.display = 'block';
+          const video = document.getElementById('success-video');
+          video.currentTime = 0;
+          video.play().catch(() => {});
           document.getElementById('success-msg').textContent =
             'Dry run complete! Everything worked up to checkout — no registration was submitted.';
         } else {
