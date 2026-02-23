@@ -487,9 +487,12 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
                 page.wait_for_load_state("networkidle")
 
-                # Verify by looking for "Promo Applied" — the clearest success signal
+                # Verify success:
+                # - Web: shows "Promo Applied: -100%"
+                # - iOS: no "Promo Applied" text — the code name appears as a discount
+                #        line item (e.g. "Nurre1979: -$15.00") instead
                 body = page.inner_text("body").lower()
-                if "promo applied" in body:
+                if "promo applied" in body or promo_code.lower() in body:
                     promo_applied = True
                 else:
                     # Check for rejection messages
