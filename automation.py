@@ -341,7 +341,7 @@ def get_classes(email, password, callback=None):
             raise
 
 
-def run_registration(email, password, class_id, student_id, promo_code=None, callback=None, dry_run=False):
+def run_registration(email, password, class_id, student_id, promo_code=None, callback=None, promo_provider=None, dry_run=False):
     """Complete the full registration flow for a given class."""
     def cb(msg):
         if callback:
@@ -449,42 +449,57 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
         if promo_code:
             cb(f"Applying promo code {promo_code}...")
-            # Try revealing the promo input (some cart pages hide it behind a link)
-            try:
-                page.get_by_text(
-                    re.compile(r"use promo code", re.IGNORECASE)
-                ).first.click(timeout=3000)
-                page.wait_for_timeout(800)
-            except Exception:
-                pass
-            # Enter the code — fail hard if the input can't be found or filled
-            try:
-                promo_input = page.locator('input[type="text"]').last
-                promo_input.wait_for(state="visible", timeout=5000)
-                promo_input.fill(promo_code, timeout=4000)
-                promo_input.press("Enter")
-                page.wait_for_load_state("networkidle")
-            except Exception as e:
-                raise Exception(
-                    f"Promo code '{promo_code}' could not be entered — "
-                    "registration cancelled to avoid a full-price charge."
-                )
-            # Verify the code was accepted, not rejected
-            try:
-                body = page.inner_text("body").lower()
-                reject_phrases = [
-                    "invalid promo", "promo code is not valid", "code is not valid",
-                    "code not found", "not a valid", "code has expired", "code expired",
-                    "cannot be applied", "not applicable", "invalid code",
-                ]
-                if any(p in body for p in reject_phrases):
+            promo_applied = False
+
+            # Try up to 2 clicks to reveal the input (the cart sometimes needs 2)
+            for click_attempt in range(2):
+                try:
+                    page.get_by_text(
+                        re.compile(r"use promo code", re.IGNORECASE)
+                    ).first.click(timeout=3000)
+                    page.wait_for_timeout(1000)
+                except Exception:
+                    pass
+
+                try:
+                    promo_input = page.locator('input[type="text"]').last
+                    promo_input.wait_for(state="visible", timeout=3000)
+                    promo_input.fill(promo_code, timeout=4000)
+                    promo_input.press("Enter")
+                    page.wait_for_load_state("networkidle")
+
+                    # Check for rejection messages
+                    body = page.inner_text("body").lower()
+                    reject_phrases = [
+                        "invalid promo", "promo code is not valid", "code is not valid",
+                        "code not found", "not a valid", "code has expired", "code expired",
+                        "cannot be applied", "not applicable", "invalid code",
+                    ]
+                    if any(p in body for p in reject_phrases):
+                        raise Exception(
+                            f"Promo code '{promo_code}' was rejected by iClassPro — "
+                            "registration cancelled to avoid a full-price charge."
+                        )
+                    promo_applied = True
+                    break
+
+                except Exception as e:
+                    if "rejected" in str(e):
+                        raise  # Real rejection — don't retry, don't ask user
+                    # Input not ready yet — try the click again
+
+            if not promo_applied:
+                # Automation couldn't enter the code after 2 attempts — ask user
+                if promo_provider:
+                    proceed = promo_provider(promo_code)
+                    if not proceed:
+                        raise Exception("Registration cancelled — promo code not confirmed.")
+                    # User confirmed they applied it manually — continue to checkout
+                else:
                     raise Exception(
-                        f"Promo code '{promo_code}' was rejected — "
+                        f"Promo code '{promo_code}' could not be entered — "
                         "registration cancelled to avoid a full-price charge."
                     )
-            except Exception as e:
-                if "cancelled" in str(e):
-                    raise
 
         if dry_run:
             cb("Dry run complete — stopping before checkout.")

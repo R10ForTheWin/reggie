@@ -301,6 +301,18 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════ PROMO -->
+<div class="screen" id="screen-promo">
+  <div class="center-screen">
+    <div class="result-icon">🎟️</div>
+    <div class="result-title" style="font-size:22px">Apply Promo Manually</div>
+    <div class="result-msg" id="promo-msg">Open the iClassPro cart and apply your promo code, then tap Continue.</div>
+    <button class="btn btn-success result-btn" style="width:240px;margin-bottom:12px" onclick="submitPromo(true)">I Applied It — Continue</button>
+    <button class="btn btn-outline result-btn" style="width:240px" onclick="submitPromo(false)">Cancel Registration</button>
+    <div id="promo-err" class="error-inline" style="display:none"></div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════ SUCCESS -->
 <div class="screen" id="screen-success">
   <div class="center-screen">
@@ -340,6 +352,7 @@
 let allClasses    = [];
 let selectedClass = null;
 let studentId     = null;
+let currentJobId  = null;
 
 // ── Screen nav ────────────────────────────────────────────────────────────
 function show(name) {
@@ -429,13 +442,31 @@ function esc(str) {
 
 // ── Job polling ───────────────────────────────────────────────────────────
 async function pollJob(jobId, onProgress, onDone, onError) {
-  const MAX_POLLS = 480; // 4 minutes max at 500ms intervals
+  const MAX_POLLS = 720; // 6 minutes max at 500ms intervals
   let polls = 0;
+  let onPromoScreen = false;
+
   while (polls++ < MAX_POLLS) {
     await new Promise(r => setTimeout(r, 500));
     try {
       const res = await fetch('/api/job/' + jobId);
       const job = await res.json();
+
+      if (job.status === 'awaiting_promo') {
+        if (!onPromoScreen) {
+          onPromoScreen = true;
+          document.getElementById('promo-msg').textContent = job.message;
+          document.getElementById('promo-err').style.display = 'none';
+          show('promo');
+        }
+        continue;
+      }
+
+      if (onPromoScreen && job.status === 'running') {
+        onPromoScreen = false;
+        show('loading');
+      }
+
       if (job.message && onProgress) onProgress(job.message);
       if (job.status === 'done')      { onDone(job.result);  return; }
       if (job.status === 'error')     { onError(job.message); return; }
@@ -446,6 +477,27 @@ async function pollJob(jobId, onProgress, onDone, onError) {
     }
   }
   onError('Timed out waiting for response — please check the iClassPro portal to confirm your registration status.');
+}
+
+// ── Promo manual confirmation ─────────────────────────────────────────────
+async function submitPromo(proceed) {
+  try {
+    const res  = await fetch('/api/promo/' + currentJobId, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ proceed }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    if (proceed) {
+      show('loading');
+      document.getElementById('loading-msg').textContent = 'Continuing to checkout...';
+    }
+    // If not proceeding, poll loop will catch the error status and show error screen
+  } catch (err) {
+    document.getElementById('promo-err').textContent = err.message || 'Failed — try again.';
+    document.getElementById('promo-err').style.display = 'block';
+  }
 }
 
 // ── Find classes ──────────────────────────────────────────────────────────
@@ -469,6 +521,7 @@ async function startFindClasses() {
       msg => { document.getElementById('loading-msg').textContent = msg; },
       result => {
         allClasses = result.classes || [];
+        currentJobId = null;
         studentId  = result.student_id;
         renderClasses(allClasses);
         document.getElementById('search').value = '';
@@ -561,6 +614,7 @@ async function doRegister() {
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
+    currentJobId = data.job_id;
 
     pollJob(data.job_id,
       msg => { document.getElementById('loading-msg').textContent = msg; },
