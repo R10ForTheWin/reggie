@@ -236,6 +236,9 @@ _SAFE_ERRORS = (
     "Could not refresh session",
     "Another job is already running",
     "Unauthorized",
+    "cancelled to avoid",
+    "was rejected",
+    "could not be entered",
 )
 
 def _safe_error(exc):

@@ -578,11 +578,7 @@ async function doRegister() {
             'Dry run complete! Everything worked up to checkout — no registration was submitted.';
         } else {
           const name = selectedClass.className || selectedClass.name || 'your class';
-          let msg = `Registered for ${name}!`;
-          if (result && result.promo_warning) {
-            msg += ` Note: ${result.promo_warning}`;
-          }
-          document.getElementById('success-msg').textContent = msg;
+          document.getElementById('success-msg').textContent = `Registered for ${name}!`;
           document.getElementById('success-icon').style.display = 'none';
           document.getElementById('success-tagline').style.display = 'block';
           const wrap = document.getElementById('success-video-wrap');

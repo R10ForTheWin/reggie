@@ -347,8 +347,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         if callback:
             callback(msg)
 
-    captured    = {"cart_item": None}
-    promo_warning = None
+    captured = {"cart_item": None}
 
     enroll_url = (
         f"{PORTAL}/enroll/new-cart-item"
@@ -450,24 +449,42 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
         if promo_code:
             cb(f"Applying promo code {promo_code}...")
+            # Try revealing the promo input (some cart pages hide it behind a link)
             try:
-                # Cart page has a "Use Promo Code" link that reveals the input
-                try:
-                    page.get_by_text(
-                        re.compile(r"use promo code", re.IGNORECASE)
-                    ).first.click(timeout=3000)
-                    page.wait_for_timeout(800)
-                except Exception:
-                    pass
-                # The promo input is a plain text input that appears after clicking the link
+                page.get_by_text(
+                    re.compile(r"use promo code", re.IGNORECASE)
+                ).first.click(timeout=3000)
+                page.wait_for_timeout(800)
+            except Exception:
+                pass
+            # Enter the code — fail hard if the input can't be found or filled
+            try:
                 promo_input = page.locator('input[type="text"]').last
+                promo_input.wait_for(state="visible", timeout=5000)
                 promo_input.fill(promo_code, timeout=4000)
                 promo_input.press("Enter")
                 page.wait_for_load_state("networkidle")
             except Exception as e:
-                promo_warning = f"Promo code '{promo_code}' could not be applied automatically — add it manually if needed."
-                _log.warning("promo code apply failed: %s", e)
-                cb(f"Note: {promo_warning}")
+                raise Exception(
+                    f"Promo code '{promo_code}' could not be entered — "
+                    "registration cancelled to avoid a full-price charge."
+                )
+            # Verify the code was accepted, not rejected
+            try:
+                body = page.inner_text("body").lower()
+                reject_phrases = [
+                    "invalid promo", "promo code is not valid", "code is not valid",
+                    "code not found", "not a valid", "code has expired", "code expired",
+                    "cannot be applied", "not applicable", "invalid code",
+                ]
+                if any(p in body for p in reject_phrases):
+                    raise Exception(
+                        f"Promo code '{promo_code}' was rejected — "
+                        "registration cancelled to avoid a full-price charge."
+                    )
+            except Exception as e:
+                if "cancelled" in str(e):
+                    raise
 
         if dry_run:
             cb("Dry run complete — stopping before checkout.")
@@ -489,4 +506,4 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
         browser.close()
 
-    return {"promo_warning": promo_warning}
+    return {}
