@@ -233,7 +233,9 @@ _SAFE_ERRORS = (
     "Could not complete checkout",
     "Checkout did not complete",
     "Could not detect your student profile",
+    "Could not refresh session",
     "Another job is already running",
+    "Unauthorized",
 )
 
 def _safe_error(exc):

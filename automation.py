@@ -304,34 +304,41 @@ def get_classes(email, password, callback=None):
             raise Exception("Could not capture session token — please try again.")
         _cache_token(email, token)
 
-    try:
-        cb("Detecting your student profile...")
-        students_raw = _api_get("students", {}, token)
-        lst = (students_raw.get("data") or students_raw.get("students")
-               or (students_raw if isinstance(students_raw, list) else []))
-        if not lst:
-            raise Exception("Could not detect your student profile — please try again.")
-        student_id = lst[0].get("id") or lst[0].get("studentId")
-        if not student_id:
-            raise Exception("Could not detect your student profile — please try again.")
+    for attempt in range(2):
+        try:
+            cb("Detecting your student profile...")
+            students_raw = _api_get("students", {}, token)
+            lst = (students_raw.get("data") or students_raw.get("students")
+                   or (students_raw if isinstance(students_raw, list) else []))
+            if not lst:
+                raise Exception("Could not detect your student profile — please try again.")
+            student_id = lst[0].get("id") or lst[0].get("studentId")
+            if not student_id:
+                raise Exception("Could not detect your student profile — please try again.")
 
-        cb("Loading available classes...")
-        classes_raw = _api_get("classes", {
-            "locationId":        1,
-            "limit":             100,
-            "page":              1,
-            "students":          student_id,
-            "futureOpeningDate": "false",
-        }, token)
-        classes_lst = (classes_raw.get("data") or classes_raw.get("classes")
-                       or (classes_raw if isinstance(classes_raw, list) else []))
-        return {"classes": classes_lst, "student_id": student_id}
+            cb("Loading available classes...")
+            classes_raw = _api_get("classes", {
+                "locationId":        1,
+                "limit":             100,
+                "page":              1,
+                "students":          student_id,
+                "futureOpeningDate": "false",
+            }, token)
+            classes_lst = (classes_raw.get("data") or classes_raw.get("classes")
+                           or (classes_raw if isinstance(classes_raw, list) else []))
+            return {"classes": classes_lst, "student_id": student_id}
 
-    except Exception as e:
-        # Token may have expired — invalidate and let caller retry
-        if "401" in str(e) or "403" in str(e) or "token" in str(e).lower():
-            _invalidate_token(email)
-        raise
+        except Exception as e:
+            if attempt == 0 and ("401" in str(e) or "403" in str(e)):
+                # Token expired — invalidate and do a fresh browser login, then retry
+                _invalidate_token(email)
+                cb("Session expired — logging in again...")
+                token = _browser_get_token(email, password, cb)
+                if not token:
+                    raise Exception("Could not refresh session — please try again.")
+                _cache_token(email, token)
+                continue
+            raise
 
 
 def run_registration(email, password, class_id, student_id, promo_code=None, callback=None, dry_run=False):
