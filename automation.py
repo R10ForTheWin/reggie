@@ -451,25 +451,48 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             cb(f"Applying promo code {promo_code}...")
             promo_applied = False
 
-            # Try up to 2 clicks to reveal the input (the cart sometimes needs 2)
-            for click_attempt in range(2):
+            # "Use Promo Code" is a link in the cart sidebar — click it to reveal the input
+            try:
+                link = page.get_by_role("link", name=re.compile(r"use promo code", re.IGNORECASE))
+                if link.count() == 0:
+                    link = page.get_by_text(re.compile(r"use promo code", re.IGNORECASE))
+                link.first.click(timeout=5000)
+                # Wait for the input to animate in
+                page.locator('input[type="text"]').last.wait_for(state="visible", timeout=5000)
+            except Exception:
+                pass  # Input may already be visible
+
+            try:
+                promo_input = page.locator('input[type="text"]').last
+                promo_input.wait_for(state="visible", timeout=5000)
+                promo_input.click()          # Focus the field
+                promo_input.fill(promo_code)
+
+                # Click the gold arrow submit button next to the input
+                # Try adjacent sibling button first, fall back to Enter
+                submit_clicked = False
                 try:
-                    page.get_by_text(
-                        re.compile(r"use promo code", re.IGNORECASE)
-                    ).first.click(timeout=3000)
-                    page.wait_for_timeout(1000)
+                    page.locator('input[type="text"] + button').click(timeout=2000)
+                    submit_clicked = True
                 except Exception:
                     pass
-
-                try:
-                    promo_input = page.locator('input[type="text"]').last
-                    promo_input.wait_for(state="visible", timeout=3000)
-                    promo_input.fill(promo_code, timeout=4000)
+                if not submit_clicked:
+                    try:
+                        promo_input.locator('xpath=../button').click(timeout=2000)
+                        submit_clicked = True
+                    except Exception:
+                        pass
+                if not submit_clicked:
                     promo_input.press("Enter")
-                    page.wait_for_load_state("networkidle")
 
+                page.wait_for_load_state("networkidle")
+
+                # Verify by looking for "Promo Applied" — the clearest success signal
+                body = page.inner_text("body").lower()
+                if "promo applied" in body:
+                    promo_applied = True
+                else:
                     # Check for rejection messages
-                    body = page.inner_text("body").lower()
                     reject_phrases = [
                         "invalid promo", "promo code is not valid", "code is not valid",
                         "code not found", "not a valid", "code has expired", "code expired",
@@ -480,16 +503,14 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                             f"Promo code '{promo_code}' was rejected by iClassPro — "
                             "registration cancelled to avoid a full-price charge."
                         )
-                    promo_applied = True
-                    break
+                    # Not confirmed and not rejected — treat as unconfirmed
 
-                except Exception as e:
-                    if "rejected" in str(e):
-                        raise  # Real rejection — don't retry, don't ask user
-                    # Input not ready yet — try the click again
+            except Exception as e:
+                if "rejected" in str(e):
+                    raise  # Real rejection — don't retry, surface immediately
 
             if not promo_applied:
-                # Automation couldn't enter the code after 2 attempts — ask user
+                # Automation couldn't confirm the code applied — ask user
                 if promo_provider:
                     proceed = promo_provider(promo_code)
                     if not proceed:
@@ -497,7 +518,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     # User confirmed they applied it manually — continue to checkout
                 else:
                     raise Exception(
-                        f"Promo code '{promo_code}' could not be entered — "
+                        f"Promo code '{promo_code}' could not be confirmed — "
                         "registration cancelled to avoid a full-price charge."
                     )
 
