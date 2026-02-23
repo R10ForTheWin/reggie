@@ -296,13 +296,6 @@
       <div class="confirm-label">Promo Code</div>
       <div class="confirm-value" id="confirm-promo" style="color:var(--blue)">None</div>
     </div>
-    <label id="dry-run-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;cursor:pointer;font-size:14px;color:var(--muted);background:#f5f5f5;padding:12px 16px;border-radius:12px;">
-      <span>Ignore this toggle. It's for test runs to troubleshoot the app</span>
-      <span id="dry-run-visual" style="display:inline-block;width:44px;height:26px;background:#ccc;border-radius:13px;position:relative;transition:background .2s;flex-shrink:0;">
-        <span style="position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:transform .2s;display:block;" id="dry-run-knob"></span>
-      </span>
-      <input type="checkbox" id="dry-run-toggle" style="display:none">
-    </label>
     <button class="btn btn-success" onclick="doRegister()">Register Now</button>
     <button class="btn btn-outline" onclick="show('classes')">Back</button>
   </div>
@@ -332,6 +325,16 @@
   </div>
 </div>
 
+<!-- Discreet dry-run toggle — bottom right corner, confirm screen only -->
+<div id="dry-run-corner" style="display:none;position:fixed;bottom:max(24px,env(safe-area-inset-bottom,24px));right:20px;z-index:100;align-items:center;gap:7px;opacity:0.35;">
+  <span style="font-size:11px;color:var(--muted);user-select:none;">test</span>
+  <label style="position:relative;width:36px;height:22px;cursor:pointer;display:block;flex-shrink:0;">
+    <input type="checkbox" id="dry-run-toggle" style="opacity:0;position:absolute;width:0;height:0;">
+    <span id="dry-run-visual" style="position:absolute;inset:0;background:#ccc;border-radius:11px;transition:background .2s;display:block;"></span>
+    <span id="dry-run-knob" style="position:absolute;top:3px;left:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .2s;display:block;box-shadow:0 1px 3px rgba(0,0,0,.25);"></span>
+  </label>
+</div>
+
 <script>
 // ── State ─────────────────────────────────────────────────────────────────
 let allClasses    = [];
@@ -343,6 +346,8 @@ function show(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
   window.scrollTo(0, 0);
+  const corner = document.getElementById('dry-run-corner');
+  if (corner) corner.style.display = (name === 'confirm') ? 'flex' : 'none';
 }
 
 // ── Profile helpers ───────────────────────────────────────────────────────
@@ -361,16 +366,16 @@ function storeProfile(email, password, promo) {
 
 // ── Dry run toggle ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  const label   = document.getElementById('dry-run-label');
-  const toggle  = document.getElementById('dry-run-toggle');
-  const visual  = document.getElementById('dry-run-visual');
-  const knob    = document.getElementById('dry-run-knob');
-  if (label) {
-    label.addEventListener('click', e => {
+  const corner = document.getElementById('dry-run-corner');
+  const toggle = document.getElementById('dry-run-toggle');
+  const visual = document.getElementById('dry-run-visual');
+  const knob   = document.getElementById('dry-run-knob');
+  if (corner) {
+    corner.addEventListener('click', e => {
       e.preventDefault();
       toggle.checked = !toggle.checked;
-      visual.style.background = toggle.checked ? 'var(--blue, #3b82f6)' : '#ccc';
-      knob.style.transform    = toggle.checked ? 'translateX(18px)' : 'translateX(0)';
+      visual.style.background = toggle.checked ? 'var(--blue)' : '#ccc';
+      knob.style.transform    = toggle.checked ? 'translateX(14px)' : 'translateX(0)';
     });
   }
 });
