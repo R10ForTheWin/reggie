@@ -437,11 +437,15 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             cb(f"Applying promo code {promo_code}...")
             promo_applied = False
 
-            # Dump visible cart text so we can see what's actually rendered
+            # Wait for the cart to fully render before touching the promo section.
+            # Angular SPA can still be painting after networkidle fires.
             try:
-                _log.info("Promo: cart page text >>> %s <<<", page.inner_text("body")[:1000])
-            except Exception:
-                pass
+                page.get_by_text(
+                    re.compile(r"promo code", re.IGNORECASE)
+                ).first.wait_for(state="visible", timeout=15000)
+                _log.info("Promo: cart promo section visible")
+            except Exception as e:
+                _log.warning("Promo: timed out waiting for promo section: %s", e)
 
             # Step 1: Click "Use Promo Code" to reveal the input
             _log.info("Promo: looking for 'Use Promo Code' trigger on %s", page.url)
