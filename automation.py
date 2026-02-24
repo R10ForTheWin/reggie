@@ -149,7 +149,7 @@ def _click_first(page, text_re, timeout=5000):
         return
     except Exception:
         pass
-    _log.warning("_click_first: no element found for %r on %s", text_re, page.url)
+    _log.debug("_click_first: no element found for %r on %s", text_re, page.url)
 
 
 def _login(page, email, password):
