@@ -108,34 +108,31 @@ UA = (
     "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 )
 
-# ── Shared browser ─────────────────────────────────────────────────────────
-# One Chromium process is shared across all jobs. Each job gets its own
-# lightweight browser context, so 3 concurrent registrations cost roughly
-# the same memory as 1 did before.
+# ── Per-thread browser ─────────────────────────────────────────────────────
+# Each gunicorn gthread gets its own Playwright + Chromium instance stored in
+# thread-local storage. This avoids the "cannot switch to a different thread"
+# crash that occurs when a global sync_playwright instance's internal event-
+# loop thread exits while other threads still try to use it.
 
-_shared_browser     = None
-_shared_pw          = None
-_browser_init_lock  = threading.Lock()
+_thread_local = threading.local()
 
 
 def _get_browser():
-    """Return the shared Chromium browser, launching it if needed."""
-    global _shared_browser, _shared_pw
-    with _browser_init_lock:
+    """Return this thread's Chromium browser, launching it if needed."""
+    try:
+        if getattr(_thread_local, 'browser', None) is not None and _thread_local.browser.is_connected():
+            return _thread_local.browser
+    except Exception:
+        pass
+    # Browser gone or not yet created for this thread — (re)launch
+    if getattr(_thread_local, 'pw', None) is not None:
         try:
-            if _shared_browser is not None and _shared_browser.is_connected():
-                return _shared_browser
+            _thread_local.pw.__exit__(None, None, None)
         except Exception:
             pass
-        # Browser gone — restart playwright + browser
-        if _shared_pw is not None:
-            try:
-                _shared_pw.__exit__(None, None, None)
-            except Exception:
-                pass
-        _shared_pw      = sync_playwright().__enter__()
-        _shared_browser = _shared_pw.chromium.launch(headless=True, args=LAUNCH_ARGS)
-        return _shared_browser
+    _thread_local.pw      = sync_playwright().__enter__()
+    _thread_local.browser = _thread_local.pw.chromium.launch(headless=True, args=LAUNCH_ARGS)
+    return _thread_local.browser
 
 
 def _new_context(storage_state=None):
@@ -660,7 +657,6 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
         if dry_run:
             cb("Dry run complete — stopping before checkout.")
-            browser.close()
             return "dry_run"
 
         cb("Completing checkout...")
@@ -687,4 +683,4 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             except Exception:
                 pass
 
-    return result
+    return {}
