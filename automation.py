@@ -181,8 +181,7 @@ def _login(page, email, password):
         email_input = page.locator('input[type="email"]:not([id="emailForgot"])')
         email_input.first.wait_for(state="attached", timeout=60000)
         email_input.first.click()
-        email_input.first.fill("")
-        email_input.first.press_sequentially(email, delay=10)
+        email_input.first.fill(email)
     except PlaywrightTimeout:
         raise Exception(
             f"Could not find login form (page: {page.url}). "
@@ -192,8 +191,7 @@ def _login(page, email, password):
     # Fill password
     pwd_input = page.locator('input[type="password"]').first
     pwd_input.click()
-    pwd_input.fill("")
-    pwd_input.press_sequentially(password, delay=10)
+    pwd_input.fill(password)
     # No sleep — click Next immediately
     # The visible submit is the "Next" nav button; the form's button[type=submit] is hidden
     submitted = False
@@ -334,6 +332,24 @@ def get_classes(email, password, callback=None):
             raise
 
 
+def _clear_cart(page, cb):
+    """Remove all items from the iClassPro cart."""
+    _log.info("Cart: clearing stale items...")
+    cb("Clearing previous cart contents...")
+    for _ in range(10):  # safety limit — max 10 items
+        try:
+            remove_btn = page.locator(
+                'button, ion-button, ion-item, a, [role="button"]'
+            ).filter(has_text=re.compile(r"^remove$", re.IGNORECASE)).first
+            if remove_btn.count() == 0:
+                break
+            remove_btn.click(timeout=5000)
+            page.wait_for_load_state("networkidle")
+        except Exception:
+            break
+    _log.info("Cart: cleared")
+
+
 def run_registration(email, password, class_id, student_id, promo_code=None, callback=None, dry_run=False):
     """Complete the full registration flow for a given class."""
     def cb(msg):
@@ -399,6 +415,14 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             page.goto(enroll_url)
             page.wait_for_load_state("networkidle")
 
+        # If a previous interrupted run left items in the cart, clear them first
+        # so we always register exactly the class the user selected.
+        if "/scaq/cart" in page.url:
+            _log.warning("Landed on cart — clearing stale cart before retrying enrollment")
+            _clear_cart(page, cb)
+            page.goto(enroll_url)
+            page.wait_for_load_state("networkidle")
+
         for _ in range(60):
             if captured["cart_item"]:
                 break
@@ -429,7 +453,8 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             ).first.click()
             page.wait_for_url("**/scaq/cart**", timeout=15000)
         except Exception:
-            raise Exception("Could not add to cart — you may already be enrolled in this class.")
+            if "/scaq/cart" not in page.url:
+                raise Exception("Could not add to cart — you may already be enrolled in this class.")
 
         page.wait_for_load_state("networkidle")  # ensure Angular cart is fully rendered
 
@@ -471,7 +496,6 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 if cnt > 0:
                     link.first.click(timeout=5000)
                     _log.info("Promo: trigger clicked")
-                    page.wait_for_timeout(1000)
                 else:
                     _log.warning("Promo: trigger not found — input may already be visible")
             except Exception as e:
@@ -529,7 +553,20 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     promo_input.press("Enter")
 
                 page.wait_for_load_state("networkidle")
-                page.wait_for_timeout(2000)  # Ionic SPA needs time to update DOM
+                # Wake as soon as the DOM reflects promo success or rejection
+                try:
+                    page.wait_for_function(
+                        """() => {
+                            const b = (document.body.innerText || '').toLowerCase();
+                            return b.includes('promo applied') || b.includes('invalid promo') ||
+                                   b.includes('code not found') || b.includes('not a valid') ||
+                                   b.includes('code has expired') || b.includes('cannot be applied') ||
+                                   b.includes('not applicable') || b.includes('invalid code');
+                        }""",
+                        timeout=3000,
+                    )
+                except Exception:
+                    pass
 
                 # Step 4: Verify success
                 body = page.inner_text("body").lower()
