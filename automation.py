@@ -539,17 +539,12 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     raise  # Real rejection — surface immediately
 
             if not promo_applied:
-                # Automation couldn't confirm the code applied — ask user
-                if promo_provider:
-                    proceed = promo_provider(promo_code)
-                    if not proceed:
-                        raise Exception("Registration cancelled — promo code not confirmed.")
-                    # User confirmed they applied it manually — continue to checkout
-                else:
-                    raise Exception(
-                        f"Promo code '{promo_code}' could not be confirmed — "
-                        "registration cancelled to avoid a full-price charge."
-                    )
+                # The cart lives in the server's browser — the user can't access it
+                # to apply the promo manually, so just cancel and let them retry.
+                raise Exception(
+                    f"Couldn't apply promo code '{promo_code}' automatically — "
+                    "registration cancelled. Please try again."
+                )
 
         if dry_run:
             cb("Dry run complete — stopping before checkout.")
