@@ -382,12 +382,17 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
         page.on("response", on_response)
 
+        # Block images and media — speeds up networkidle significantly
+        page.route("**/*", lambda route: route.abort()
+            if route.request.resource_type in ("image", "media")
+            else route.continue_())
+
         if cached_state:
             cb("Using saved session...")
             # Try jumping straight to the enrollment page
             cb("Opening enrollment page...")
             page.goto(enroll_url)
-            page.wait_for_load_state("networkidle")
+            page.wait_for_load_state("load")
             # If the session expired the portal redirects to login
             if "/login" in page.url:
                 cb("Session expired — logging in again...")
@@ -399,7 +404,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 except Exception:
                     pass
                 page.goto(enroll_url)
-                page.wait_for_load_state("networkidle")
+                page.wait_for_load_state("load")
         else:
             cb("First time setup — logging in now. This will take 1-2 minutes...")
             try:
@@ -414,7 +419,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 raise
             cb("Opening enrollment page...")
             page.goto(enroll_url)
-            page.wait_for_load_state("networkidle")
+            page.wait_for_load_state("load")
 
         # If a previous interrupted run left items in the cart, clear them first
         # so we always register exactly the class the user selected.
@@ -422,9 +427,9 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             _log.warning("Landed on cart — clearing stale cart before retrying enrollment")
             _clear_cart(page, cb)
             page.goto(enroll_url)
-            page.wait_for_load_state("networkidle")
+            page.wait_for_load_state("load")
 
-        for _ in range(60):
+        for _ in range(150):
             if captured["cart_item"]:
                 break
             page.wait_for_timeout(100)
