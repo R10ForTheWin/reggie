@@ -230,15 +230,23 @@ def api_register():
             _update(jid, message=f"Server is busy, waiting... ({waited}s)")
         try:
             from automation import run_registration
+
+            def _on_checkout_confirmed(result):
+                result_data = result if isinstance(result, dict) else {}
+                _update(jid, status="done", message="Registration complete!",
+                        result={"dry_run": False, **result_data})
+
             result = run_registration(email, password, class_id, student_id,
                                       promo_code=promo or None,
                                       callback=_make_callback(jid),
-                                      dry_run=dry_run)
+                                      dry_run=dry_run,
+                                      on_checkout_confirmed=_on_checkout_confirmed)
             if result == "dry_run":
                 _update(jid, status="done",
                         message="Dry run complete — everything worked up to checkout!",
                         result={"dry_run": True})
-            else:
+            elif _get(jid)["status"] != "done":
+                # Fallback: on_checkout_confirmed wasn't reached (left_cart was False)
                 result_data = result if isinstance(result, dict) else {}
                 _update(jid, status="done", message="Registration complete!",
                         result={"dry_run": False, **result_data})

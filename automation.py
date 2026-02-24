@@ -350,7 +350,7 @@ def _clear_cart(page, cb):
     _log.info("Cart: cleared")
 
 
-def run_registration(email, password, class_id, student_id, promo_code=None, callback=None, dry_run=False):
+def run_registration(email, password, class_id, student_id, promo_code=None, callback=None, dry_run=False, on_checkout_confirmed=None):
     """Complete the full registration flow for a given class."""
     def cb(msg):
         if callback:
@@ -389,12 +389,12 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
         if cached_state:
             cb("Using saved session...")
-            _log.info("Timing: using cached session")
+            _log.debug("Timing: using cached session")
             cb("Opening enrollment page...")
             _t0 = time.time()
             page.goto(enroll_url)
             page.wait_for_load_state("domcontentloaded")
-            _log.info("Timing: enrollment page load=%.1fs url=%s", time.time() - _t0, page.url)
+            _log.debug("Timing: enrollment page load=%.1fs url=%s", time.time() - _t0, page.url)
             # If the session expired the portal redirects to login
             if "/login" in page.url:
                 cb("Session expired — logging in again...")
@@ -408,10 +408,10 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 _t0 = time.time()
                 page.goto(enroll_url)
                 page.wait_for_load_state("domcontentloaded")
-                _log.info("Timing: enrollment page reload=%.1fs", time.time() - _t0)
+                _log.debug("Timing: enrollment page reload=%.1fs", time.time() - _t0)
         else:
             cb("First time setup — logging in now. This will take 1-2 minutes...")
-            _log.info("Timing: no cached session — full browser login")
+            _log.debug("Timing: no cached session — full browser login")
             try:
                 _login(page, email, password)
                 try:
@@ -426,7 +426,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             _t0 = time.time()
             page.goto(enroll_url)
             page.wait_for_load_state("domcontentloaded")
-            _log.info("Timing: enrollment page load=%.1fs url=%s", time.time() - _t0, page.url)
+            _log.debug("Timing: enrollment page load=%.1fs url=%s", time.time() - _t0, page.url)
 
         # If a previous interrupted run left items in the cart, clear them first
         # so we always register exactly the class the user selected.
@@ -664,6 +664,13 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     _log.info("Checkout: confirmation number captured: %s", result["confirmation"])
             except Exception:
                 pass
+            # Mark the job done NOW — before browser.close() — so a SIGTERM
+            # during browser cleanup can't overwrite the status to "error".
+            if on_checkout_confirmed:
+                try:
+                    on_checkout_confirmed(result)
+                except Exception:
+                    pass
 
         browser.close()
 
