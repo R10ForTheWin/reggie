@@ -393,7 +393,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             cb("Opening enrollment page...")
             _t0 = time.time()
             page.goto(enroll_url)
-            page.wait_for_load_state("load")
+            page.wait_for_load_state("domcontentloaded")
             _log.info("Timing: enrollment page load=%.1fs url=%s", time.time() - _t0, page.url)
             # If the session expired the portal redirects to login
             if "/login" in page.url:
@@ -407,7 +407,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     pass
                 _t0 = time.time()
                 page.goto(enroll_url)
-                page.wait_for_load_state("load")
+                page.wait_for_load_state("domcontentloaded")
                 _log.info("Timing: enrollment page reload=%.1fs", time.time() - _t0)
         else:
             cb("First time setup — logging in now. This will take 1-2 minutes...")
@@ -425,7 +425,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             cb("Opening enrollment page...")
             _t0 = time.time()
             page.goto(enroll_url)
-            page.wait_for_load_state("load")
+            page.wait_for_load_state("domcontentloaded")
             _log.info("Timing: enrollment page load=%.1fs url=%s", time.time() - _t0, page.url)
 
         # If a previous interrupted run left items in the cart, clear them first
@@ -434,7 +434,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             _log.warning("Landed on cart — clearing stale cart before retrying enrollment")
             _clear_cart(page, cb)
             page.goto(enroll_url)
-            page.wait_for_load_state("load")
+            page.wait_for_load_state("domcontentloaded")
 
         for _ in range(150):
             if captured["cart_item"]:
