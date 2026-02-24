@@ -5,6 +5,7 @@ Reggie – Flask web app
 import logging
 import os
 import re as _re
+import signal
 import threading
 import time
 import uuid
@@ -19,6 +20,19 @@ _jobs_lock = threading.Lock()
 
 # Only one Playwright browser at a time — prevents OOM on free tier
 _browser_lock = threading.BoundedSemaphore(1)
+
+
+def _sigterm_handler(signum, frame):
+    """Mark any in-progress jobs as failed before gunicorn shuts us down."""
+    with _jobs_lock:
+        for j in _jobs.values():
+            if j["status"] == "running":
+                j["status"] = "error"
+                j["message"] = "Server restarted mid-job — please try again."
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    os.kill(os.getpid(), signal.SIGTERM)
+
+signal.signal(signal.SIGTERM, _sigterm_handler)
 
 
 # ── Security headers ───────────────────────────────────────────────────────
