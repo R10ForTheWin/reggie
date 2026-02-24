@@ -18,8 +18,8 @@ app  = Flask(__name__)
 _jobs      = {}
 _jobs_lock = threading.Lock()
 
-# Only one Playwright browser at a time — prevents OOM on free tier
-_browser_lock = threading.BoundedSemaphore(1)
+# Max 3 concurrent browser contexts — shared browser keeps memory manageable
+_browser_lock = threading.BoundedSemaphore(3)
 
 
 def _sigterm_handler(signum, frame):
@@ -129,11 +129,10 @@ def debug_screenshot():
     import io
     import re as _re
     from flask import send_file
-    from playwright.sync_api import sync_playwright
-    from automation import _new_browser
+    from automation import _new_context
     try:
-        with sync_playwright() as p:
-            browser, _ctx, page = _new_browser(p)
+        context, page = _new_context()
+        with context:
             page.goto("https://portal.iclasspro.com/scaq/locations?next=https://portal.iclasspro.com/scaq")
             page.wait_for_load_state("networkidle")
             for text in [_re.compile("SCAQ", _re.IGNORECASE),
@@ -152,7 +151,6 @@ def debug_screenshot():
             except Exception:
                 pass
             img_bytes = page.screenshot(full_page=True)
-            browser.close()
         return send_file(io.BytesIO(img_bytes), mimetype="image/png")
     except Exception as e:
         return "Snapshot error — check server logs", 500

@@ -108,9 +108,38 @@ UA = (
     "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 )
 
+# ── Shared browser ─────────────────────────────────────────────────────────
+# One Chromium process is shared across all jobs. Each job gets its own
+# lightweight browser context, so 3 concurrent registrations cost roughly
+# the same memory as 1 did before.
 
-def _new_browser(p, storage_state=None):
-    browser = p.chromium.launch(headless=True, args=LAUNCH_ARGS)
+_shared_browser     = None
+_shared_pw          = None
+_browser_init_lock  = threading.Lock()
+
+
+def _get_browser():
+    """Return the shared Chromium browser, launching it if needed."""
+    global _shared_browser, _shared_pw
+    with _browser_init_lock:
+        try:
+            if _shared_browser is not None and _shared_browser.is_connected():
+                return _shared_browser
+        except Exception:
+            pass
+        # Browser gone — restart playwright + browser
+        if _shared_pw is not None:
+            try:
+                _shared_pw.__exit__(None, None, None)
+            except Exception:
+                pass
+        _shared_pw      = sync_playwright().__enter__()
+        _shared_browser = _shared_pw.chromium.launch(headless=True, args=LAUNCH_ARGS)
+        return _shared_browser
+
+
+def _new_context(storage_state=None):
+    """Create a new browser context (and page) from the shared browser."""
     ctx_kw = dict(
         user_agent=UA,
         viewport={"width": 390, "height": 844},
@@ -119,7 +148,7 @@ def _new_browser(p, storage_state=None):
     )
     if storage_state:
         ctx_kw["storage_state"] = storage_state
-    context = browser.new_context(**ctx_kw)
+    context = _get_browser().new_context(**ctx_kw)
     page = context.new_page()
     page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     try:
@@ -127,7 +156,7 @@ def _new_browser(p, storage_state=None):
         stealth_sync(page)
     except Exception:
         pass
-    return browser, context, page
+    return context, page
 
 
 def _click_first(page, text_re, timeout=5000):
@@ -233,48 +262,45 @@ def _api_get(path, params, token):
 
 
 def _browser_get_token(email, password, cb):
-    """Launch browser, log in, capture JWT token and save session state."""
+    """Log in via browser, capture JWT token and save session state."""
     captured = {"token": None}
+    context, page = _new_context()
 
-    with sync_playwright() as p:
-        browser, context, page = _new_browser(p)
-
-        def on_response(resp):
-            try:
-                if resp.status != 200 or captured["token"]:
+    def on_response(resp):
+        try:
+            if resp.status != 200 or captured["token"]:
+                return
+            if "/jwt/v1/login" in resp.url:
+                data = resp.json()
+                tok = data.get("token") or data.get("access_token")
+                if tok:
+                    captured["token"] = tok
                     return
-                if "/jwt/v1/login" in resp.url:
-                    data = resp.json()
-                    tok = data.get("token") or data.get("access_token")
-                    if tok:
-                        captured["token"] = tok
-                        return
-                if "app.iclasspro.com/api/jwt/v1/" in resp.url and "token=" in resp.url:
-                    tok = urllib.parse.parse_qs(
-                        urllib.parse.urlparse(resp.url).query
-                    ).get("token", [None])[0]
-                    if tok:
-                        captured["token"] = tok
-            except Exception:
-                pass
+            if "app.iclasspro.com/api/jwt/v1/" in resp.url and "token=" in resp.url:
+                tok = urllib.parse.parse_qs(
+                    urllib.parse.urlparse(resp.url).query
+                ).get("token", [None])[0]
+                if tok:
+                    captured["token"] = tok
+        except Exception:
+            pass
 
-        page.on("response", on_response)
-        _login(page, email, password)
+    page.on("response", on_response)
+    _login(page, email, password)
 
-        for _ in range(10):
-            if captured["token"]:
-                break
-            page.wait_for_timeout(300)
-
-        # Only save session if login produced a valid token
+    for _ in range(10):
         if captured["token"]:
-            try:
-                _cache_session(email, context.storage_state())
-            except Exception:
-                pass
+            break
+        page.wait_for_timeout(300)
 
-        browser.close()
+    # Only save session if login produced a valid token
+    if captured["token"]:
+        try:
+            _cache_session(email, context.storage_state())
+        except Exception:
+            pass
 
+    context.close()
     return captured["token"]
 
 
@@ -366,9 +392,9 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         f"&open"
     )
 
-    with sync_playwright() as p:
-        cached_state = _get_cached_session(email)
-        browser, context, page = _new_browser(p, storage_state=cached_state)
+    cached_state = _get_cached_session(email)
+    context, page = _new_context(storage_state=cached_state)
+    with context:
 
         def on_response(resp):
             try:
@@ -660,7 +686,5 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 on_checkout_confirmed({})
             except Exception:
                 pass
-
-        browser.close()
 
     return result
