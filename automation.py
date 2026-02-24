@@ -438,28 +438,46 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             promo_applied = False
 
             # Step 1: Click "Use Promo Code" to reveal the input
-            _log.info("Promo: looking for 'Use Promo Code' link on %s", page.url)
+            _log.info("Promo: looking for 'Use Promo Code' trigger on %s", page.url)
+            _PROMO_TEXT = re.compile(r"use promo code|promo code|have a promo|enter.*code", re.IGNORECASE)
             try:
-                link = page.get_by_role("link", name=re.compile(r"use promo code", re.IGNORECASE))
-                cnt = link.count()
-                _log.info("Promo: get_by_role('link') count=%d", cnt)
+                cnt = 0
+                for role in ("link", "button"):
+                    link = page.get_by_role(role, name=_PROMO_TEXT)
+                    cnt = link.count()
+                    _log.info("Promo: get_by_role(%r) count=%d", role, cnt)
+                    if cnt > 0:
+                        break
                 if cnt == 0:
-                    link = page.get_by_text(re.compile(r"use promo code", re.IGNORECASE))
+                    link = page.locator(
+                        'ion-button, ion-item, ion-label, a, button'
+                    ).filter(has_text=_PROMO_TEXT)
+                    cnt = link.count()
+                    _log.info("Promo: ionic selector count=%d", cnt)
+                if cnt == 0:
+                    link = page.get_by_text(_PROMO_TEXT)
                     cnt = link.count()
                     _log.info("Promo: get_by_text count=%d", cnt)
                 if cnt > 0:
                     link.first.click(timeout=5000)
-                    _log.info("Promo: link clicked, waiting for input to appear")
-                    page.locator('input[type="text"]').last.wait_for(state="visible", timeout=8000)
-                    _log.info("Promo: input appeared after link click")
+                    _log.info("Promo: trigger clicked")
+                    page.wait_for_timeout(1000)
                 else:
-                    _log.warning("Promo: 'Use Promo Code' link not found — input may already be visible")
+                    _log.warning("Promo: trigger not found — input may already be visible")
             except Exception as e:
-                _log.warning("Promo: link/input step failed: %s", e)
+                _log.warning("Promo: trigger step failed: %s", e)
 
             # Step 2: Fill and submit
+            # Ionic renders ion-input as a native <input class="native-input"> internally
+            _PROMO_INPUT_SEL = (
+                'ion-input input, '
+                'input[type="text"], '
+                'input[placeholder*="romo" i], '
+                'input[placeholder*="ode" i], '
+                'input:not([type="email"]):not([type="password"]):not([type="hidden"])'
+            )
             try:
-                promo_input = page.locator('input[type="text"]').last
+                promo_input = page.locator(_PROMO_INPUT_SEL).last
                 _log.info("Promo: waiting for input to be visible")
                 promo_input.wait_for(state="visible", timeout=8000)
                 _log.info("Promo: input visible, filling code")
@@ -469,10 +487,10 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 # Step 3: Click the submit button (arrow). Try every known selector.
                 submit_clicked = False
                 for btn_sel in [
-                    'input[type="text"] + button',
-                    'input[type="text"] + ion-button',
-                    'input[type="text"] ~ button',
-                    'input[type="text"] ~ ion-button',
+                    'ion-input + button', 'ion-input + ion-button',
+                    'ion-input ~ button', 'ion-input ~ ion-button',
+                    'input[type="text"] + button', 'input[type="text"] + ion-button',
+                    'input[type="text"] ~ button', 'input[type="text"] ~ ion-button',
                 ]:
                     try:
                         page.locator(btn_sel).last.click(timeout=2000)
@@ -482,7 +500,11 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     except Exception:
                         pass
                 if not submit_clicked:
-                    for xpath in ['../button', '../ion-button', '../..//button', '../..//ion-button']:
+                    for xpath in [
+                        '../button', '../ion-button',
+                        '../..//button', '../..//ion-button',
+                        '../../..//button', '../../..//ion-button',
+                    ]:
                         try:
                             promo_input.locator(f'xpath={xpath}').first.click(timeout=2000)
                             submit_clicked = True
