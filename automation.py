@@ -478,13 +478,15 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 _log.warning("Promo: trigger step failed: %s", e)
 
             # Step 2: Fill and submit
-            # Ionic renders ion-input as a native <input class="native-input"> internally
+            # Ionic renders ion-input as a native <input class="native-input"> internally.
+            # Exclude checkboxes/radios explicitly — the cart has ~20 hidden checkbox inputs
+            # (ion-checkbox components) that would otherwise be matched by broad selectors.
             _PROMO_INPUT_SEL = (
-                'ion-input input, '
+                'ion-input input[type="text"], '
+                'ion-input input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="email"]):not([type="password"]), '
                 'input[type="text"], '
                 'input[placeholder*="romo" i], '
-                'input[placeholder*="ode" i], '
-                'input:not([type="email"]):not([type="password"]):not([type="hidden"])'
+                'input[placeholder*="ode" i]'
             )
             try:
                 promo_input = page.locator(_PROMO_INPUT_SEL).last
