@@ -383,6 +383,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         page.on("response", on_response)
 
         if cached_state:
+            cb("Using saved session...")
             # Try jumping straight to the enrollment page
             cb("Opening enrollment page...")
             page.goto(enroll_url)
@@ -400,7 +401,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 page.goto(enroll_url)
                 page.wait_for_load_state("networkidle")
         else:
-            cb("Logging in...")
+            cb("First time setup — logging in now. This will take 1-2 minutes...")
             try:
                 _login(page, email, password)
                 try:
