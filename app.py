@@ -64,12 +64,10 @@ def _create_job():
     jid = str(uuid.uuid4())
     with _jobs_lock:
         _jobs[jid] = {
-            "status":       "running",
-            "message":      "Starting...",
-            "result":       None,
-            "created_at":   time.time(),
-            "promo_event":  threading.Event(),
-            "promo_decision": None,
+            "status":     "running",
+            "message":    "Starting...",
+            "result":     None,
+            "created_at": time.time(),
         }
     return jid
 
@@ -85,7 +83,7 @@ def _get(jid):
         j = _jobs.get(jid)
         if not j:
             return {"status": "not_found", "message": "Job not found"}
-        return {k: v for k, v in j.items() if k not in ("promo_event", "promo_decision")}
+        return dict(j)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────
@@ -205,23 +203,9 @@ def api_register():
             _update(jid, message=f"Server is busy, waiting... ({waited}s)")
         try:
             from automation import run_registration
-
-            def promo_provider(code):
-                """Pause automation, ask user to apply promo manually, wait for decision."""
-                _update(jid, status="awaiting_promo",
-                        message=f"Couldn't apply promo code '{code}' automatically — apply it manually in the cart, then tap Continue")
-                with _jobs_lock:
-                    event = _jobs[jid]["promo_event"]
-                event.wait(timeout=300)  # 5 minutes
-                with _jobs_lock:
-                    decision = _jobs[jid].get("promo_decision")
-                _update(jid, status="running", message="Continuing to checkout...")
-                return decision  # True = proceed, False = cancel
-
             result = run_registration(email, password, class_id, student_id,
                                       promo_code=promo or None,
                                       callback=lambda m: _update(jid, message=m),
-                                      promo_provider=promo_provider,
                                       dry_run=dry_run)
             if result == "dry_run":
                 _update(jid, status="done",
@@ -245,17 +229,6 @@ def api_job(jid):
     return jsonify(_get(jid))
 
 
-@app.route("/api/promo/<jid>", methods=["POST"])
-def api_promo(jid):
-    data    = request.json or {}
-    proceed = bool(data.get("proceed", False))
-    with _jobs_lock:
-        if jid not in _jobs:
-            return jsonify({"error": "Job not found"}), 404
-        _jobs[jid]["promo_decision"] = proceed
-        _jobs[jid]["promo_event"].set()
-    return jsonify({"ok": True})
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -274,6 +247,8 @@ _SAFE_ERRORS = (
     "cancelled to avoid",
     "was rejected",
     "could not be entered",
+    "registration cancelled",
+    "couldn't apply promo",
 )
 
 def _safe_error(exc):

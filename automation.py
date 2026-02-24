@@ -49,13 +49,6 @@ def _save_cache(email, data):
         pass
 
 
-def _invalidate_cache(email):
-    try:
-        path = os.path.join(_CACHE_DIR, _cache_key(email) + ".json")
-        os.remove(path)
-    except Exception:
-        pass
-
 
 def _get_cached_token(email):
     with _cache_lock:
@@ -341,7 +334,7 @@ def get_classes(email, password, callback=None):
             raise
 
 
-def run_registration(email, password, class_id, student_id, promo_code=None, callback=None, promo_provider=None, dry_run=False):
+def run_registration(email, password, class_id, student_id, promo_code=None, callback=None, dry_run=False):
     """Complete the full registration flow for a given class."""
     def cb(msg):
         if callback:
@@ -363,13 +356,6 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
         def on_response(resp):
             try:
-                if "iclasspro.com" in resp.url:
-                    _log.info("API [%s] [%s] %s", resp.request.method, resp.status, resp.url)
-                    if resp.request.method in ("POST", "PUT", "PATCH"):
-                        try:
-                            _log.info("API body: %s", resp.json())
-                        except Exception:
-                            pass
                 if resp.status != 200:
                     return
                 if ("/jwt/v1/new-cart-item/class-enrollment/" in resp.url
