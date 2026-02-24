@@ -496,31 +496,31 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 promo_input.click()
                 promo_input.fill(promo_code)
 
-                # Step 3: Click the submit button (arrow). Try every known selector.
+                # Step 3: Click the submit button (arrow).
+                # xpath '../..//button' is confirmed working — try it first,
+                # then fall back to CSS siblings with short timeouts.
                 submit_clicked = False
-                for btn_sel in [
-                    'ion-input + button', 'ion-input + ion-button',
-                    'ion-input ~ button', 'ion-input ~ ion-button',
-                    'input[type="text"] + button', 'input[type="text"] + ion-button',
-                    'input[type="text"] ~ button', 'input[type="text"] ~ ion-button',
+                for xpath in [
+                    '../..//button', '../..//ion-button',
+                    '../button', '../ion-button',
+                    '../../..//button', '../../..//ion-button',
                 ]:
                     try:
-                        page.locator(btn_sel).last.click(timeout=2000)
+                        promo_input.locator(f'xpath={xpath}').first.click(timeout=1000)
                         submit_clicked = True
-                        _log.info("Promo: submit via CSS '%s'", btn_sel)
+                        _log.info("Promo: submit via xpath '%s'", xpath)
                         break
                     except Exception:
                         pass
                 if not submit_clicked:
-                    for xpath in [
-                        '../button', '../ion-button',
-                        '../..//button', '../..//ion-button',
-                        '../../..//button', '../../..//ion-button',
+                    for btn_sel in [
+                        'ion-input ~ button', 'ion-input ~ ion-button',
+                        'input[type="text"] ~ button', 'input[type="text"] ~ ion-button',
                     ]:
                         try:
-                            promo_input.locator(f'xpath={xpath}').first.click(timeout=2000)
+                            page.locator(btn_sel).last.click(timeout=500)
                             submit_clicked = True
-                            _log.info("Promo: submit via xpath '%s'", xpath)
+                            _log.info("Promo: submit via CSS '%s'", btn_sel)
                             break
                         except Exception:
                             pass
