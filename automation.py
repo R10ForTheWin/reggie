@@ -459,15 +459,31 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     pass
 
         cb("Adding to cart...")
-        try:
+        def _try_add_to_cart():
             page.get_by_role(
                 "button",
                 name=re.compile(r"add.to.cart|continue|enroll|register", re.IGNORECASE)
             ).first.click()
             page.wait_for_url("**/scaq/cart**", timeout=15000)
+
+        try:
+            _try_add_to_cart()
         except Exception:
             if "/scaq/cart" not in page.url:
-                raise Exception("Could not add to cart — you may already be enrolled in this class.")
+                # May be a stale cart item blocking — clear and retry once
+                _log.warning("Add to cart failed — clearing cart and retrying")
+                cb("Clearing cart and retrying...")
+                page.goto(f"{PORTAL}/cart")
+                page.wait_for_load_state("networkidle")
+                _clear_cart(page, cb)
+                cb("Opening enrollment page again...")
+                page.goto(enroll_url)
+                page.wait_for_load_state("domcontentloaded")
+                try:
+                    _try_add_to_cart()
+                except Exception:
+                    if "/scaq/cart" not in page.url:
+                        raise Exception("Could not add to cart — you may already be enrolled in this class.")
 
         page.wait_for_load_state("networkidle")  # ensure Angular cart is fully rendered
 
