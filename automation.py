@@ -653,24 +653,13 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         except PlaywrightTimeout:
             _log.warning("Cart redirect timed out — checkout may still have succeeded")
 
-        result = {}
-        if left_cart:
+        # Mark the job done NOW — before browser.close() — so a SIGTERM
+        # during browser cleanup can't overwrite the status to "error".
+        if left_cart and on_checkout_confirmed:
             try:
-                page.wait_for_load_state("domcontentloaded")
-                body = page.inner_text("body")
-                m = re.search(r'#\s*([A-Z0-9]{5,})', body)
-                if m:
-                    result["confirmation"] = m.group(1)
-                    _log.info("Checkout: confirmation number captured: %s", result["confirmation"])
+                on_checkout_confirmed({})
             except Exception:
                 pass
-            # Mark the job done NOW — before browser.close() — so a SIGTERM
-            # during browser cleanup can't overwrite the status to "error".
-            if on_checkout_confirmed:
-                try:
-                    on_checkout_confirmed(result)
-                except Exception:
-                    pass
 
         browser.close()
 
