@@ -338,12 +338,12 @@ def _clear_cart(page, cb):
     cb("Clearing previous cart contents...")
     for _ in range(10):  # safety limit — max 10 items
         try:
-            remove_btn = page.locator(
+            remove_btns = page.locator(
                 'button, ion-button, ion-item, a, [role="button"]'
-            ).filter(has_text=re.compile(r"^remove$", re.IGNORECASE)).first
-            if remove_btn.count() == 0:
+            ).filter(has_text=re.compile(r"^remove$", re.IGNORECASE))
+            if remove_btns.count() == 0:
                 break
-            remove_btn.click(timeout=5000)
+            remove_btns.first.click(timeout=5000)
             page.wait_for_load_state("networkidle")
         except Exception:
             break
