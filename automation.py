@@ -437,6 +437,12 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             cb(f"Applying promo code {promo_code}...")
             promo_applied = False
 
+            # Dump visible cart text so we can see what's actually rendered
+            try:
+                _log.info("Promo: cart page text >>> %s <<<", page.inner_text("body")[:1000])
+            except Exception:
+                pass
+
             # Step 1: Click "Use Promo Code" to reveal the input
             _log.info("Promo: looking for 'Use Promo Code' trigger on %s", page.url)
             _PROMO_TEXT = re.compile(r"use promo code|promo code|have a promo|enter.*code", re.IGNORECASE)
