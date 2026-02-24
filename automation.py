@@ -389,10 +389,12 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
         if cached_state:
             cb("Using saved session...")
-            # Try jumping straight to the enrollment page
+            _log.info("Timing: using cached session")
             cb("Opening enrollment page...")
+            _t0 = time.time()
             page.goto(enroll_url)
             page.wait_for_load_state("load")
+            _log.info("Timing: enrollment page load=%.1fs url=%s", time.time() - _t0, page.url)
             # If the session expired the portal redirects to login
             if "/login" in page.url:
                 cb("Session expired — logging in again...")
@@ -403,10 +405,13 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     _cache_session(email, context.storage_state())
                 except Exception:
                     pass
+                _t0 = time.time()
                 page.goto(enroll_url)
                 page.wait_for_load_state("load")
+                _log.info("Timing: enrollment page reload=%.1fs", time.time() - _t0)
         else:
             cb("First time setup — logging in now. This will take 1-2 minutes...")
+            _log.info("Timing: no cached session — full browser login")
             try:
                 _login(page, email, password)
                 try:
@@ -418,8 +423,10 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 _invalidate_session(email)
                 raise
             cb("Opening enrollment page...")
+            _t0 = time.time()
             page.goto(enroll_url)
             page.wait_for_load_state("load")
+            _log.info("Timing: enrollment page load=%.1fs url=%s", time.time() - _t0, page.url)
 
         # If a previous interrupted run left items in the cart, clear them first
         # so we always register exactly the class the user selected.
