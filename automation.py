@@ -629,11 +629,26 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             ).first.click()
         except Exception:
             raise Exception("Could not complete checkout automatically.")
+
+        left_cart = False
         try:
             page.wait_for_function("!window.location.href.includes('/cart')", timeout=30000)
+            left_cart = True
         except PlaywrightTimeout:
             _log.warning("Cart redirect timed out — checkout may still have succeeded")
 
+        result = {}
+        if left_cart:
+            try:
+                page.wait_for_load_state("domcontentloaded")
+                body = page.inner_text("body")
+                m = re.search(r'#\s*([A-Z0-9]{5,})', body)
+                if m:
+                    result["confirmation"] = m.group(1)
+                    _log.info("Checkout: confirmation number captured: %s", result["confirmation"])
+            except Exception:
+                pass
+
         browser.close()
 
-    return {}
+    return result

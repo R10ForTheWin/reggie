@@ -302,18 +302,6 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════ PROMO -->
-<div class="screen" id="screen-promo">
-  <div class="center-screen">
-    <div class="result-icon">🎟️</div>
-    <div class="result-title" style="font-size:22px">Apply Promo Manually</div>
-    <div class="result-msg" id="promo-msg">Open the iClassPro cart and apply your promo code, then tap Continue.</div>
-    <button class="btn btn-success result-btn" style="width:240px;margin-bottom:12px" onclick="submitPromo(true)">I Applied It — Continue</button>
-    <button class="btn btn-outline result-btn" style="width:240px" onclick="submitPromo(false)">Cancel Registration</button>
-    <div id="promo-err" class="error-inline" style="display:none"></div>
-  </div>
-</div>
-
 <!-- ══════════════════════════════════════════ SUCCESS -->
 <div class="screen" id="screen-success">
   <div class="center-screen">
@@ -459,7 +447,6 @@ async function pollJob(jobId, onProgress, onDone, onError) {
   _pollCancelled = false;
   const MAX_POLLS = 720; // 6 minutes max at 500ms intervals
   let polls = 0;
-  let onPromoScreen = false;
 
   while (polls++ < MAX_POLLS) {
     if (_pollCancelled) return;
@@ -467,22 +454,6 @@ async function pollJob(jobId, onProgress, onDone, onError) {
     try {
       const res = await fetch('/api/job/' + jobId);
       const job = await res.json();
-
-      if (job.status === 'awaiting_promo') {
-        if (!onPromoScreen) {
-          onPromoScreen = true;
-          document.getElementById('promo-msg').textContent = job.message;
-          document.getElementById('promo-err').style.display = 'none';
-          show('promo');
-        }
-        continue;
-      }
-
-      if (onPromoScreen && job.status === 'running') {
-        onPromoScreen = false;
-        show('loading');
-      }
-
       if (job.message && onProgress) onProgress(job.message);
       if (job.status === 'done')      { onDone(job.result);  return; }
       if (job.status === 'error')     { onError(job.message); return; }
@@ -493,27 +464,6 @@ async function pollJob(jobId, onProgress, onDone, onError) {
     }
   }
   onError('Timed out waiting for response — please check the iClassPro portal to confirm your registration status.');
-}
-
-// ── Promo manual confirmation ─────────────────────────────────────────────
-async function submitPromo(proceed) {
-  try {
-    const res  = await fetch('/api/promo/' + currentJobId, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ proceed }),
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    if (proceed) {
-      show('loading');
-      document.getElementById('loading-msg').textContent = 'Continuing to checkout...';
-    }
-    // If not proceeding, poll loop will catch the error status and show error screen
-  } catch (err) {
-    document.getElementById('promo-err').textContent = err.message || 'Failed — try again.';
-    document.getElementById('promo-err').style.display = 'block';
-  }
 }
 
 // ── Find classes ──────────────────────────────────────────────────────────
@@ -563,7 +513,7 @@ function renderClasses(list) {
     el.innerHTML = '<p style="text-align:center;color:var(--muted);padding:32px 0">No classes found</p>';
     return;
   }
-  el.innerHTML = list.map((cls, i) => {
+  el.innerHTML = list.map((cls) => {
     const name  = esc(cls.className || cls.name || ('Class ' + cls.id));
     const day   = esc(cls.dayOfWeek   || '');
     const start = esc(cls.startTime   || '');
@@ -574,7 +524,7 @@ function renderClasses(list) {
     const spotsStr   = spots != null ? spots + ' spot' + (spots !== 1 ? 's' : '') + ' open' : '';
     const spotsClass = (spots != null && spots === 0) ? 'class-spots full' : 'class-spots';
 
-    return `<div class="class-item" onclick="selectClass(${i})" data-idx="${i}">
+    return `<div class="class-item" onclick="selectClass(${cls.id})" data-id="${cls.id}">
       <div class="class-name">${name}</div>
       ${sched  ? `<div class="class-meta">${sched}</div>` : ''}
       ${instr  ? `<div class="class-meta">with ${esc(instr)}</div>` : ''}
@@ -591,8 +541,9 @@ function filterClasses() {
   renderClasses(filtered);
 }
 
-function selectClass(i) {
-  selectedClass = allClasses[i];
+function selectClass(id) {
+  selectedClass = allClasses.find(c => c.id == id);
+  if (!selectedClass) return;
   const name  = selectedClass.className || selectedClass.name || ('Class ' + selectedClass.id);
   const day   = selectedClass.dayOfWeek || '';
   const start = selectedClass.startTime || '';
@@ -651,7 +602,8 @@ async function doRegister() {
             'Dry run complete! Everything worked up to checkout — no registration was submitted.';
         } else {
           const name = selectedClass.className || selectedClass.name || 'your class';
-          document.getElementById('success-msg').textContent = `Registered for ${name}!`;
+          const conf = result && result.confirmation ? ` · Conf# ${result.confirmation}` : '';
+          document.getElementById('success-msg').textContent = `Registered for ${name}!${conf}`;
           document.getElementById('success-icon').style.display = 'none';
           document.getElementById('success-tagline').style.display = 'block';
           const wrap = document.getElementById('success-video-wrap');
