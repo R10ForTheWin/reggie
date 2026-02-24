@@ -82,8 +82,21 @@ def _create_job():
             "message":    "Starting...",
             "result":     None,
             "created_at": time.time(),
+            "cancelled":  False,
         }
     return jid
+
+
+def _make_callback(jid):
+    """Return a callback that forwards progress messages and raises if job was cancelled."""
+    def _cb(msg):
+        with _jobs_lock:
+            j = _jobs.get(jid)
+            cancelled = j and j.get("cancelled")
+        if cancelled:
+            raise InterruptedError("Registration cancelled by user.")
+        _update(jid, message=msg)
+    return _cb
 
 
 def _update(jid, **kw):
@@ -175,7 +188,7 @@ def api_classes():
             from automation import get_classes
             _update(jid, message="Logging in...")
             result = get_classes(email, password,
-                                 callback=lambda m: _update(jid, message=m))
+                                 callback=_make_callback(jid))
             _update(jid, status="done", message="Classes loaded", result=result)
         except Exception as e:
             _update(jid, status="error", message=_safe_error(e))
@@ -219,7 +232,7 @@ def api_register():
             from automation import run_registration
             result = run_registration(email, password, class_id, student_id,
                                       promo_code=promo or None,
-                                      callback=lambda m: _update(jid, message=m),
+                                      callback=_make_callback(jid),
                                       dry_run=dry_run)
             if result == "dry_run":
                 _update(jid, status="done",
@@ -243,6 +256,16 @@ def api_job(jid):
     return jsonify(_get(jid))
 
 
+@app.route("/api/cancel/<jid>", methods=["POST"])
+def api_cancel(jid):
+    with _jobs_lock:
+        j = _jobs.get(jid)
+        if not j:
+            return jsonify({"ok": False, "error": "Job not found"}), 404
+        if j["status"] == "running":
+            j["cancelled"] = True
+    return jsonify({"ok": True})
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -263,6 +286,7 @@ _SAFE_ERRORS = (
     "could not be entered",
     "registration cancelled",
     "couldn't apply promo",
+    "cancelled by user",
 )
 
 def _safe_error(exc):

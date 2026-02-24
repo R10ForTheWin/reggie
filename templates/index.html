@@ -263,6 +263,7 @@
     </div>
     <div class="status-text" id="loading-msg">Loading...</div>
     <p class="note" id="loading-note" style="margin-top:18px">First login takes ~90 seconds.<br>Much faster after that.</p>
+    <button class="btn btn-outline" id="cancel-job-btn" style="margin-top:28px;width:160px;display:none;" onclick="cancelJob()">Cancel</button>
   </div>
 </div>
 
@@ -353,6 +354,7 @@ let allClasses    = [];
 let selectedClass = null;
 let studentId     = null;
 let currentJobId  = null;
+let _pollCancelled = false;
 
 // ── Screen nav ────────────────────────────────────────────────────────────
 function show(name) {
@@ -440,13 +442,27 @@ function esc(str) {
     .replace(/'/g, '&#39;');
 }
 
+// ── Cancel ────────────────────────────────────────────────────────────────
+async function cancelJob() {
+  _pollCancelled = true;
+  const jid = currentJobId;
+  currentJobId = null;
+  document.getElementById('cancel-job-btn').style.display = 'none';
+  if (jid) {
+    fetch('/api/cancel/' + jid, { method: 'POST' }).catch(() => {});
+  }
+  show('home');
+}
+
 // ── Job polling ───────────────────────────────────────────────────────────
 async function pollJob(jobId, onProgress, onDone, onError) {
+  _pollCancelled = false;
   const MAX_POLLS = 720; // 6 minutes max at 500ms intervals
   let polls = 0;
   let onPromoScreen = false;
 
   while (polls++ < MAX_POLLS) {
+    if (_pollCancelled) return;
     await new Promise(r => setTimeout(r, 500));
     try {
       const res = await fetch('/api/job/' + jobId);
@@ -506,6 +522,7 @@ async function startFindClasses() {
   if (!p.email || !p.password) { openSetup(); return; }
 
   document.getElementById('loading-msg').textContent = 'Logging in...';
+  document.getElementById('cancel-job-btn').style.display = 'none';
   show('loading');
 
   try {
@@ -615,10 +632,12 @@ async function doRegister() {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     currentJobId = data.job_id;
+    document.getElementById('cancel-job-btn').style.display = 'block';
 
     pollJob(data.job_id,
       msg => { document.getElementById('loading-msg').textContent = msg; },
       result => {
+        document.getElementById('cancel-job-btn').style.display = 'none';
         if (result && result.dry_run) {
           document.getElementById('success-icon').style.display = 'none';
           document.getElementById('success-tagline').style.display = 'block';
@@ -645,11 +664,13 @@ async function doRegister() {
         show('success');
       },
       err => {
+        document.getElementById('cancel-job-btn').style.display = 'none';
         document.getElementById('error-msg').textContent = err;
         show('error');
       }
     );
   } catch (err) {
+    document.getElementById('cancel-job-btn').style.display = 'none';
     document.getElementById('error-msg').textContent = err.message;
     show('error');
   }
