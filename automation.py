@@ -468,24 +468,34 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 promo_input.click()          # Focus the field
                 promo_input.fill(promo_code)
 
-                # Click the gold arrow submit button next to the input
-                # Try adjacent sibling button first, fall back to Enter
+                # Click the gold arrow submit button next to the input.
+                # In Ionic the button may be <ion-button> not <button>, so try both.
                 submit_clicked = False
-                try:
-                    page.locator('input[type="text"] + button').click(timeout=2000)
-                    submit_clicked = True
-                except Exception:
-                    pass
-                if not submit_clicked:
+                for btn_sel in [
+                    'input[type="text"] + button',
+                    'input[type="text"] + ion-button',
+                    'input[type="text"] ~ button',
+                    'input[type="text"] ~ ion-button',
+                ]:
                     try:
-                        promo_input.locator('xpath=../button').click(timeout=2000)
+                        page.locator(btn_sel).last.click(timeout=2000)
                         submit_clicked = True
+                        break
                     except Exception:
                         pass
+                if not submit_clicked:
+                    for xpath in ['../button', '../ion-button', '../..//button', '../..//ion-button']:
+                        try:
+                            promo_input.locator(f'xpath={xpath}').first.click(timeout=2000)
+                            submit_clicked = True
+                            break
+                        except Exception:
+                            pass
                 if not submit_clicked:
                     promo_input.press("Enter")
 
                 page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(2000)  # Ionic SPA needs time to update DOM after promo submit
 
                 # Verify success:
                 # - Web: shows "Promo Applied: -100%"
