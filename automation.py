@@ -445,31 +445,42 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         except Exception:
             raise Exception("Could not add to cart — you may already be enrolled in this class.")
 
-        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_load_state("networkidle")  # ensure Angular cart is fully rendered
 
         if promo_code:
             cb(f"Applying promo code {promo_code}...")
             promo_applied = False
 
-            # "Use Promo Code" is a link in the cart sidebar — click it to reveal the input
+            # Step 1: Click "Use Promo Code" to reveal the input
+            _log.info("Promo: looking for 'Use Promo Code' link on %s", page.url)
             try:
                 link = page.get_by_role("link", name=re.compile(r"use promo code", re.IGNORECASE))
-                if link.count() == 0:
+                cnt = link.count()
+                _log.info("Promo: get_by_role('link') count=%d", cnt)
+                if cnt == 0:
                     link = page.get_by_text(re.compile(r"use promo code", re.IGNORECASE))
-                link.first.click(timeout=5000)
-                # Wait for the input to animate in
-                page.locator('input[type="text"]').last.wait_for(state="visible", timeout=5000)
-            except Exception:
-                pass  # Input may already be visible
+                    cnt = link.count()
+                    _log.info("Promo: get_by_text count=%d", cnt)
+                if cnt > 0:
+                    link.first.click(timeout=5000)
+                    _log.info("Promo: link clicked, waiting for input to appear")
+                    page.locator('input[type="text"]').last.wait_for(state="visible", timeout=8000)
+                    _log.info("Promo: input appeared after link click")
+                else:
+                    _log.warning("Promo: 'Use Promo Code' link not found — input may already be visible")
+            except Exception as e:
+                _log.warning("Promo: link/input step failed: %s", e)
 
+            # Step 2: Fill and submit
             try:
                 promo_input = page.locator('input[type="text"]').last
-                promo_input.wait_for(state="visible", timeout=5000)
-                promo_input.click()          # Focus the field
+                _log.info("Promo: waiting for input to be visible")
+                promo_input.wait_for(state="visible", timeout=8000)
+                _log.info("Promo: input visible, filling code")
+                promo_input.click()
                 promo_input.fill(promo_code)
 
-                # Click the gold arrow submit button next to the input.
-                # In Ionic the button may be <ion-button> not <button>, so try both.
+                # Step 3: Click the submit button (arrow). Try every known selector.
                 submit_clicked = False
                 for btn_sel in [
                     'input[type="text"] + button',
@@ -480,6 +491,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     try:
                         page.locator(btn_sel).last.click(timeout=2000)
                         submit_clicked = True
+                        _log.info("Promo: submit via CSS '%s'", btn_sel)
                         break
                     except Exception:
                         pass
@@ -488,24 +500,27 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                         try:
                             promo_input.locator(f'xpath={xpath}').first.click(timeout=2000)
                             submit_clicked = True
+                            _log.info("Promo: submit via xpath '%s'", xpath)
                             break
                         except Exception:
                             pass
                 if not submit_clicked:
+                    _log.warning("Promo: no submit button found — pressing Enter")
                     promo_input.press("Enter")
 
                 page.wait_for_load_state("networkidle")
-                page.wait_for_timeout(2000)  # Ionic SPA needs time to update DOM after promo submit
+                page.wait_for_timeout(2000)  # Ionic SPA needs time to update DOM
 
-                # Verify success:
-                # - Web: shows "Promo Applied: -100%"
-                # - iOS: no "Promo Applied" text — the code name appears as a discount
-                #        line item (e.g. "Nurre1979: -$15.00") instead
+                # Step 4: Verify success
                 body = page.inner_text("body").lower()
-                if "promo applied" in body or promo_code.lower() in body:
+                has_promo_applied = "promo applied" in body
+                has_code_name    = promo_code.lower() in body
+                _log.info("Promo: body check — 'promo applied'=%s, code_in_body=%s",
+                          has_promo_applied, has_code_name)
+                if has_promo_applied or has_code_name:
                     promo_applied = True
+                    _log.info("Promo: SUCCESS")
                 else:
-                    # Check for rejection messages
                     reject_phrases = [
                         "invalid promo", "promo code is not valid", "code is not valid",
                         "code not found", "not a valid", "code has expired", "code expired",
@@ -516,11 +531,12 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                             f"Promo code '{promo_code}' was rejected by iClassPro — "
                             "registration cancelled to avoid a full-price charge."
                         )
-                    # Not confirmed and not rejected — treat as unconfirmed
+                    _log.warning("Promo: neither confirmed nor rejected — treating as unconfirmed")
 
             except Exception as e:
+                _log.warning("Promo: exception in fill/submit: %s", e)
                 if "rejected" in str(e):
-                    raise  # Real rejection — don't retry, surface immediately
+                    raise  # Real rejection — surface immediately
 
             if not promo_applied:
                 # Automation couldn't confirm the code applied — ask user
