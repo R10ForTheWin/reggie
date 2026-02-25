@@ -661,12 +661,40 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             return "dry_run"
 
         cb("Completing checkout...")
+        _CHECKOUT_RE = re.compile(
+            r"checkout|check.out|process|submit|pay|complete|confirm|register|enroll|book|continue|next|place.order",
+            re.IGNORECASE,
+        )
+        checkout_clicked = False
+        # Try role=button first
         try:
-            page.get_by_role(
-                "button",
-                name=re.compile(r"checkout|process|submit|pay|complete|confirm", re.IGNORECASE)
-            ).first.click()
+            page.get_by_role("button", name=_CHECKOUT_RE).first.click(timeout=10000)
+            checkout_clicked = True
         except Exception:
+            pass
+        # Broad Ionic selector fallback
+        if not checkout_clicked:
+            try:
+                page.locator(
+                    'button, ion-button, ion-item, a, [role="button"]'
+                ).filter(has_text=_CHECKOUT_RE).first.click(timeout=10000)
+                checkout_clicked = True
+            except Exception:
+                pass
+        # Last resort: any visible button not already used for promo/cart operations
+        if not checkout_clicked:
+            try:
+                page.get_by_text(_CHECKOUT_RE).first.click(timeout=5000)
+                checkout_clicked = True
+            except Exception:
+                pass
+        if not checkout_clicked:
+            # Log visible buttons to help diagnose future failures
+            try:
+                btns = page.locator('button, ion-button').all_text_contents()
+                _log.error("Checkout: no button matched. Visible buttons: %s", btns)
+            except Exception:
+                pass
             raise Exception("Could not complete checkout automatically.")
 
         left_cart = False
