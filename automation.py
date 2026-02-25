@@ -662,7 +662,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
         cb("Completing checkout...")
         _CHECKOUT_RE = re.compile(
-            r"checkout|check.out|process|submit|pay|complete|confirm|register|enroll|book|continue|next|place.order",
+            r"complete.transaction|checkout|check.out|process|submit|pay|complete|confirm|register|enroll|book|continue|next|place.order",
             re.IGNORECASE,
         )
         checkout_clicked = False
