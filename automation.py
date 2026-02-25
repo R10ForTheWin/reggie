@@ -181,7 +181,8 @@ def _click_first(page, text_re, timeout=5000):
 def _login(page, email, password):
     # Locations page → select SCAQ
     # domcontentloaded is enough — _click_first waits for the element itself
-    page.goto("https://portal.iclasspro.com/scaq/locations?next=https://portal.iclasspro.com/scaq")
+    page.goto("https://portal.iclasspro.com/scaq/locations?next=https://portal.iclasspro.com/scaq",
+              wait_until="domcontentloaded", timeout=60000)
     page.wait_for_load_state("domcontentloaded")
     _click_first(page, re.compile("SCAQ", re.IGNORECASE))
     page.wait_for_load_state("domcontentloaded")
@@ -195,7 +196,7 @@ def _login(page, email, password):
     page.wait_for_load_state("domcontentloaded")
 
     # Go directly to login page (location session already set)
-    page.goto(f"{PORTAL}/login")
+    page.goto(f"{PORTAL}/login", wait_until="domcontentloaded", timeout=60000)
     page.wait_for_load_state("networkidle")  # keep — need Angular form to render
 
     # "Are you a current customer?" → Yes
@@ -415,7 +416,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             _log.debug("Timing: using cached session")
             cb("Opening enrollment page...")
             _t0 = time.time()
-            page.goto(enroll_url)
+            page.goto(enroll_url, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_load_state("domcontentloaded")
             _log.debug("Timing: enrollment page load=%.1fs url=%s", time.time() - _t0, page.url)
             # If the session expired the portal redirects to login
@@ -429,7 +430,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 except Exception:
                     pass
                 _t0 = time.time()
-                page.goto(enroll_url)
+                page.goto(enroll_url, wait_until="domcontentloaded", timeout=60000)
                 page.wait_for_load_state("domcontentloaded")
                 _log.debug("Timing: enrollment page reload=%.1fs", time.time() - _t0)
         else:
@@ -447,7 +448,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 raise
             cb("Opening enrollment page...")
             _t0 = time.time()
-            page.goto(enroll_url)
+            page.goto(enroll_url, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_load_state("domcontentloaded")
             _log.debug("Timing: enrollment page load=%.1fs url=%s", time.time() - _t0, page.url)
 
@@ -456,7 +457,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         if "/scaq/cart" in page.url:
             _log.warning("Landed on cart — clearing stale cart before retrying enrollment")
             _clear_cart(page, cb)
-            page.goto(enroll_url)
+            page.goto(enroll_url, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_load_state("domcontentloaded")
 
         for _ in range(150):
@@ -496,11 +497,11 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 # May be a stale cart item blocking — clear and retry once
                 _log.warning("Add to cart failed — clearing cart and retrying")
                 cb("Clearing cart and retrying...")
-                page.goto(f"{PORTAL}/cart")
+                page.goto(f"{PORTAL}/cart", wait_until="domcontentloaded", timeout=60000)
                 page.wait_for_load_state("networkidle")
                 _clear_cart(page, cb)
                 cb("Opening enrollment page again...")
-                page.goto(enroll_url)
+                page.goto(enroll_url, wait_until="domcontentloaded", timeout=60000)
                 page.wait_for_load_state("domcontentloaded")
                 try:
                     _try_add_to_cart()
