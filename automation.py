@@ -662,11 +662,14 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             return "dry_run"
 
         cb("Completing checkout...")
-        # Dismiss any "Update Now!" / "Maybe Later" app-update popups that block checkout
+        # Dismiss any "Update Now!" / "Maybe Later" app-update popups that block checkout.
+        # Must use broad locator — these are ion-buttons, not <button>, so get_by_role misses them.
         for dismiss_text in ["Maybe Later", "Update Now!"]:
             try:
-                btn = page.get_by_role("button", name=re.compile(dismiss_text, re.IGNORECASE))
-                if btn.first.is_visible(timeout=2000):
+                btn = page.locator('button, ion-button, [role="button"]').filter(
+                    has_text=re.compile(dismiss_text, re.IGNORECASE)
+                )
+                if btn.first.is_visible():
                     btn.first.click(timeout=3000)
                     _log.info("Checkout: dismissed popup '%s'", dismiss_text)
                     page.wait_for_timeout(500)
