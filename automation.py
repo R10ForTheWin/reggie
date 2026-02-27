@@ -16,6 +16,13 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 
 _log = logging.getLogger(__name__)
 
+# URL patterns whose response bodies are too large/noisy to log (legal text, org config, etc.)
+_SKIP_BODY = ("/jwt/v1/policies", "/jwt/v1/organizations", "/customer-portal-notifications/")
+
+def _log_url(url):
+    """Strip JWT token from URL for readable logs."""
+    return re.sub(r'token=[^&]+', 'token=…', url)
+
 _cache_lock = threading.Lock()
 _TOKEN_TTL  = 2592000  # 30 days
 _CACHE_DIR  = "/tmp/reggie_cache"
@@ -399,7 +406,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 if resp.status != 200:
                     # Still log non-200 API calls — catches redirects and checkout endpoints
                     if "app.iclasspro.com" in resp.url:
-                        _log.info("API call (status %s): %s %s", resp.status, resp.request.method, resp.url)
+                        _log.info("API call (status %s): %s %s", resp.status, resp.request.method, _log_url(resp.url))
                     return
                 if ("/jwt/v1/new-cart-item/class-enrollment/" in resp.url
                         and "startDate" not in resp.url):
@@ -407,11 +414,16 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 # Log all iClassPro API calls for future reference — helps identify
                 # endpoints we could call directly instead of driving the browser.
                 if "app.iclasspro.com" in resp.url:
-                    try:
-                        body = resp.json()
-                    except Exception:
-                        body = "<non-JSON>"
-                    _log.info("API call: %s %s -> %s", resp.request.method, resp.url, body)
+                    if any(p in resp.url for p in _SKIP_BODY):
+                        _log.info("API call: %s %s", resp.request.method, _log_url(resp.url))
+                    else:
+                        try:
+                            body = str(resp.json())
+                            if len(body) > 400:
+                                body = body[:400] + "…"
+                        except Exception:
+                            body = "<non-JSON>"
+                        _log.info("API call: %s %s -> %s", resp.request.method, _log_url(resp.url), body)
             except Exception:
                 pass
 
