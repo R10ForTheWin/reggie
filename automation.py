@@ -685,16 +685,27 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             return "dry_run"
 
         cb("Completing checkout...")
+        # On mobile Ionic, multiple overlays/panels can stack up by checkout time.
+        # Press Escape a few times to collapse any open drawers or modals before proceeding.
+        for _ in range(3):
+            try:
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(300)
+            except Exception:
+                pass
+
         # Dismiss any "Update Now!" / "Maybe Later" app-update popups that block checkout.
         # Must use broad locator — these are ion-buttons, not <button>, so get_by_role misses them.
         for dismiss_text in ["Maybe Later", "Update Now!"]:
             try:
-                page.locator('button, ion-button, [role="button"]').filter(
+                btn = page.locator('button, ion-button, [role="button"]').filter(
                     has_text=re.compile(dismiss_text, re.IGNORECASE)
-                ).first.click(timeout=3000)
-                _log.info("Checkout: dismissed popup '%s'", dismiss_text)
-                page.wait_for_timeout(1000)
-                break
+                )
+                if btn.first.is_visible():
+                    btn.first.click(timeout=3000)
+                    _log.info("Checkout: dismissed popup '%s'", dismiss_text)
+                    page.wait_for_timeout(500)
+                    break
             except Exception:
                 pass
 
@@ -702,13 +713,25 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             r"complete.transaction|checkout|check.out|process|submit|pay|complete|confirm|register|enroll|book|continue|next|place.order",
             re.IGNORECASE,
         )
+        _COMPLETE_TRANSACTION_RE = re.compile(r"complete.transaction", re.IGNORECASE)
         checkout_clicked = False
-        # Try role=button first
+        # Try "Complete Transaction" specifically first — broad regex can match "Continue"
+        # or "Process" earlier in the DOM and click the wrong button on mobile.
         try:
-            page.get_by_role("button", name=_CHECKOUT_RE).first.click(timeout=10000)
+            page.locator(
+                'button, ion-button, ion-item, a, [role="button"]'
+            ).filter(has_text=_COMPLETE_TRANSACTION_RE).first.click(timeout=10000)
             checkout_clicked = True
+            _log.info("Checkout: clicked via Complete Transaction specific match")
         except Exception:
             pass
+        # Try role=button with broad regex
+        if not checkout_clicked:
+            try:
+                page.get_by_role("button", name=_CHECKOUT_RE).first.click(timeout=10000)
+                checkout_clicked = True
+            except Exception:
+                pass
         # Broad Ionic selector fallback
         if not checkout_clicked:
             try:
