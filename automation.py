@@ -429,6 +429,31 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
         page.on("response", on_response)
 
+        def on_request(req):
+            try:
+                if "app.iclasspro.com" not in req.url:
+                    return
+                if req.method not in ("POST", "DELETE", "PUT", "PATCH"):
+                    return
+                if any(p in req.url for p in _SKIP_BODY):
+                    return
+                body_str = "<empty>"
+                try:
+                    data = req.post_data_json
+                    if data:
+                        body_str = str(data)
+                        if len(body_str) > 400:
+                            body_str = body_str[:400] + "…"
+                except Exception:
+                    raw = req.post_data
+                    if raw:
+                        body_str = str(raw)[:400]
+                _log.info("API request body: %s %s -> %s", req.method, _log_url(req.url), body_str)
+            except Exception:
+                pass
+
+        page.on("request", on_request)
+
         # Block images and media — speeds up networkidle significantly
         page.route("**/*", lambda route: route.abort()
             if route.request.resource_type in ("image", "media")
