@@ -401,6 +401,14 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 if ("/jwt/v1/new-cart-item/class-enrollment/" in resp.url
                         and "startDate" not in resp.url):
                     captured["cart_item"] = resp.json()
+                # Log all iClassPro API calls for future reference — helps identify
+                # endpoints we could call directly instead of driving the browser.
+                if "app.iclasspro.com/api/jwt/v1/" in resp.url:
+                    try:
+                        body = resp.json()
+                    except Exception:
+                        body = "<non-JSON>"
+                    _log.info("API call: %s %s -> %s", resp.request.method, resp.url, body)
             except Exception:
                 pass
 
