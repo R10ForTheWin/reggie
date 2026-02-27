@@ -397,13 +397,16 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         def on_response(resp):
             try:
                 if resp.status != 200:
+                    # Still log non-200 API calls — catches redirects and checkout endpoints
+                    if "app.iclasspro.com" in resp.url:
+                        _log.info("API call (status %s): %s %s", resp.status, resp.request.method, resp.url)
                     return
                 if ("/jwt/v1/new-cart-item/class-enrollment/" in resp.url
                         and "startDate" not in resp.url):
                     captured["cart_item"] = resp.json()
                 # Log all iClassPro API calls for future reference — helps identify
                 # endpoints we could call directly instead of driving the browser.
-                if "app.iclasspro.com/api/jwt/v1/" in resp.url:
+                if "app.iclasspro.com" in resp.url:
                     try:
                         body = resp.json()
                     except Exception:
