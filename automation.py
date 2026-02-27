@@ -605,8 +605,9 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                     _log.warning("Promo: no submit button found — pressing Enter")
                     promo_input.press("Enter")
 
-                page.wait_for_load_state("networkidle")
-                # Wake as soon as the DOM reflects promo success or rejection
+                # Wait for DOM to reflect promo result — this is sufficient, no need for networkidle.
+                # wait_for_function checks document.body.innerText directly, so if it returns
+                # true the Angular render is already done. Saves ~7s vs networkidle-first.
                 try:
                     page.wait_for_function(
                         """() => {
@@ -616,7 +617,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                                    b.includes('code has expired') || b.includes('cannot be applied') ||
                                    b.includes('not applicable') || b.includes('invalid code');
                         }""",
-                        timeout=3000,
+                        timeout=10000,
                     )
                 except Exception:
                     pass
@@ -661,6 +662,18 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             return "dry_run"
 
         cb("Completing checkout...")
+        # Dismiss any "Update Now!" / "Maybe Later" app-update popups that block checkout
+        for dismiss_text in ["Maybe Later", "Update Now!"]:
+            try:
+                btn = page.get_by_role("button", name=re.compile(dismiss_text, re.IGNORECASE))
+                if btn.first.is_visible(timeout=2000):
+                    btn.first.click(timeout=3000)
+                    _log.info("Checkout: dismissed popup '%s'", dismiss_text)
+                    page.wait_for_timeout(500)
+                    break
+            except Exception:
+                pass
+
         _CHECKOUT_RE = re.compile(
             r"complete.transaction|checkout|check.out|process|submit|pay|complete|confirm|register|enroll|book|continue|next|place.order",
             re.IGNORECASE,
