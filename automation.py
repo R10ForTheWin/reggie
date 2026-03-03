@@ -251,19 +251,55 @@ def _login(page, email, password):
         raise Exception("Login failed — double-check your email and password.")
 
 
-def _api_get(path, params, token):
-    """Direct HTTP call to iClassPro JWT API using a captured browser token."""
+_API_HEADERS = {
+    "Accept":   "application/json, text/plain, */*",
+    "Origin":   "https://portal.iclasspro.com",
+    "Referer":  "https://portal.iclasspro.com/scaq/",
+    "User-Agent": UA,
+}
+
+def _api_url(path, params, token):
     p = dict(params)
     p["token"] = token
-    url = f"https://app.iclasspro.com/api/jwt/v1/{path}?{urllib.parse.urlencode(p)}"
-    req = urllib.request.Request(url, headers={
-        "Accept":  "application/json, text/plain, */*",
-        "Origin":  "https://portal.iclasspro.com",
-        "Referer": "https://portal.iclasspro.com/scaq/",
-        "User-Agent": UA,
-    })
+    return f"https://app.iclasspro.com/api/jwt/v1/{path}?{urllib.parse.urlencode(p)}"
+
+
+def _api_get(path, params, token):
+    """Direct HTTP GET to iClassPro JWT API."""
+    req = urllib.request.Request(_api_url(path, params, token), headers=_API_HEADERS)
     with urllib.request.urlopen(req, timeout=15) as resp:
         return json.loads(resp.read())
+
+
+def _api_post(path, params, token, body=None):
+    """Direct HTTP POST to iClassPro JWT API."""
+    data = json.dumps(body).encode("utf-8") if body is not None else b""
+    req = urllib.request.Request(
+        _api_url(path, params, token), data=data, method="POST",
+        headers={**_API_HEADERS, "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read())
+
+
+def _api_delete(path, params, token):
+    """Direct HTTP DELETE to iClassPro JWT API."""
+    req = urllib.request.Request(
+        _api_url(path, params, token), method="DELETE", headers=_API_HEADERS,
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read())
+
+
+def _api_refresh(token):
+    """Refresh JWT and return new access token (returns original on failure)."""
+    try:
+        result = _api_post("refresh", {}, token)
+        data = result.get("data") or result
+        return data.get("access_token") or token
+    except Exception as e:
+        _log.warning("Token refresh failed: %s", e)
+        return token
 
 
 def _browser_get_token(email, password, cb):
@@ -363,438 +399,151 @@ def get_classes(email, password, callback=None):
             raise
 
 
-def _clear_cart(page, cb):
-    """Remove all items from the iClassPro cart."""
-    _log.info("Cart: clearing stale items...")
-    cb("Clearing previous cart contents...")
-    for _ in range(10):  # safety limit — max 10 items
-        try:
-            remove_btns = page.locator(
-                'button, ion-button, ion-item, a, [role="button"]'
-            ).filter(has_text=re.compile(r"^remove$", re.IGNORECASE))
-            if remove_btns.count() == 0:
-                break
-            remove_btns.first.click(timeout=5000)
-            page.wait_for_load_state("networkidle")
-        except Exception:
-            break
-    _log.info("Cart: cleared")
-
-
 def run_registration(email, password, class_id, student_id, promo_code=None, callback=None, dry_run=False, on_checkout_confirmed=None):
-    """Complete the full registration flow for a given class."""
+    """Complete the full registration flow via direct iClassPro API calls.
+    Browser is only used to obtain the JWT token when not cached."""
     def cb(msg):
         if callback:
             callback(msg)
 
-    captured = {"cart_item": None}
+    # ── 1. Get JWT token (cached or via browser login) ───────────────────────
+    token = _get_cached_token(email)
+    if token:
+        cb("Using saved session...")
+    else:
+        cb("Logging in (first time — may take 1–2 minutes)...")
+        token = _browser_get_token(email, password, cb)
+        if not token:
+            raise Exception("Could not capture session token — please try again.")
+        _cache_token(email, token)
 
-    enroll_url = (
-        f"{PORTAL}/enroll/new-cart-item"
-        f"?objectId={class_id}"
-        f"&bookingType=classEnroll"
-        f"&selectedStudents={student_id}"
-        f"&open"
-    )
-
-    cached_state = _get_cached_session(email)
-    context, page = _new_context(storage_state=cached_state)
-    with context:
-
-        def on_response(resp):
-            try:
-                if resp.status != 200:
-                    # Still log non-200 API calls — catches redirects and checkout endpoints
-                    if "app.iclasspro.com" in resp.url:
-                        _log.info("API call (status %s): %s %s", resp.status, resp.request.method, _log_url(resp.url))
-                    return
-                if ("/jwt/v1/new-cart-item/class-enrollment/" in resp.url
-                        and "startDate" not in resp.url):
-                    captured["cart_item"] = resp.json()
-                # Log all iClassPro API calls for future reference — helps identify
-                # endpoints we could call directly instead of driving the browser.
-                if "app.iclasspro.com" in resp.url:
-                    if any(p in resp.url for p in _SKIP_BODY):
-                        _log.info("API call: %s %s", resp.request.method, _log_url(resp.url))
-                    else:
-                        try:
-                            body = str(resp.json())
-                            if len(body) > 400:
-                                body = body[:400] + "…"
-                        except Exception:
-                            body = "<non-JSON>"
-                        _log.info("API call: %s %s -> %s", resp.request.method, _log_url(resp.url), body)
-            except Exception:
-                pass
-
-        page.on("response", on_response)
-
-        def on_request(req):
-            try:
-                if "app.iclasspro.com" not in req.url:
-                    return
-                if req.method not in ("POST", "DELETE", "PUT", "PATCH"):
-                    return
-                if any(p in req.url for p in _SKIP_BODY):
-                    return
-                body_str = "<empty>"
-                try:
-                    data = req.post_data_json
-                    if data:
-                        body_str = str(data)
-                        if len(body_str) > 400:
-                            body_str = body_str[:400] + "…"
-                except Exception:
-                    raw = req.post_data
-                    if raw:
-                        body_str = str(raw)[:400]
-                _log.info("API request body: %s %s -> %s", req.method, _log_url(req.url), body_str)
-            except Exception:
-                pass
-
-        page.on("request", on_request)
-
-        # Block images and media — speeds up networkidle significantly
-        page.route("**/*", lambda route: route.abort()
-            if route.request.resource_type in ("image", "media")
-            else route.continue_())
-
-        if cached_state:
-            cb("Using saved session...")
-            _log.debug("Timing: using cached session")
-            cb("Opening enrollment page...")
-            _t0 = time.time()
-            page.goto(enroll_url, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_load_state("domcontentloaded")
-            _log.debug("Timing: enrollment page load=%.1fs url=%s", time.time() - _t0, page.url)
-            # If the session expired the portal redirects to login
-            if "/login" in page.url:
-                cb("Session expired — logging in again...")
-                _invalidate_token(email)
-                _invalidate_session(email)
-                _login(page, email, password)
-                try:
-                    _cache_session(email, context.storage_state())
-                except Exception:
-                    pass
-                _t0 = time.time()
-                page.goto(enroll_url, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_load_state("domcontentloaded")
-                _log.debug("Timing: enrollment page reload=%.1fs", time.time() - _t0)
-        else:
-            cb("First time setup — logging in now. This will take 1-2 minutes...")
-            _log.debug("Timing: no cached session — full browser login")
-            try:
-                _login(page, email, password)
-                try:
-                    _cache_session(email, context.storage_state())
-                except Exception:
-                    pass
-            except Exception:
-                _invalidate_token(email)
-                _invalidate_session(email)
-                raise
-            cb("Opening enrollment page...")
-            _t0 = time.time()
-            page.goto(enroll_url, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_load_state("domcontentloaded")
-            _log.debug("Timing: enrollment page load=%.1fs url=%s", time.time() - _t0, page.url)
-
-        # If a previous interrupted run left items in the cart, clear them first
-        # so we always register exactly the class the user selected.
-        if "/scaq/cart" in page.url:
-            _log.warning("Landed on cart — clearing stale cart before retrying enrollment")
-            _clear_cart(page, cb)
-            page.goto(enroll_url, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_load_state("domcontentloaded")
-
-        for _ in range(150):
-            if captured["cart_item"]:
-                break
-            page.wait_for_timeout(100)
-
-        cb("Selecting start date...")
-        cart_data = captured["cart_item"] or {}
-        dates = (cart_data.get("startDates")
-                 or cart_data.get("availableStartDates")
-                 or cart_data.get("sessions")
-                 or [])
-
-        if dates:
-            date_val = dates[0].get("startDate") or dates[0].get("date") or str(dates[0])
-            try:
-                page.get_by_text(date_val).first.click()
-            except Exception:
-                try:
-                    page.locator('[class*="date"], [class*="start"]').first.click()
-                except Exception:
-                    pass
-
-        cb("Adding to cart...")
-        def _try_add_to_cart():
-            page.get_by_role(
-                "button",
-                name=re.compile(r"add.to.cart|continue|enroll|register", re.IGNORECASE)
-            ).first.click()
-            page.wait_for_url("**/scaq/cart**", timeout=15000)
-
+    for attempt in range(2):
         try:
-            _try_add_to_cart()
-        except Exception:
-            if "/scaq/cart" not in page.url:
-                # May be a stale cart item blocking — clear and retry once
-                _log.warning("Add to cart failed — clearing cart and retrying")
-                cb("Clearing cart and retrying...")
-                page.goto(f"{PORTAL}/cart", wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_load_state("networkidle")
-                _clear_cart(page, cb)
-                cb("Opening enrollment page again...")
-                page.goto(enroll_url, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_load_state("domcontentloaded")
-                try:
-                    _try_add_to_cart()
-                except Exception:
-                    if "/scaq/cart" not in page.url:
-                        raise Exception("Could not add to cart — you may already be enrolled in this class.")
+            # ── 2. Clear stale cart ───────────────────────────────────────────
+            cb("Checking cart...")
+            cart = _api_get("validate-cart/1", {}, token)
+            cart_items = (cart.get("data") or cart).get("cartItems") or []
+            if cart_items:
+                _log.info("Cart: %d stale item(s) — clearing", len(cart_items))
+                cb("Clearing previous cart contents...")
+                _api_delete("remove-all-cart-items", {}, token)
+                _log.info("Cart: cleared")
 
-        page.wait_for_load_state("networkidle")  # ensure Angular cart is fully rendered
-
-        if promo_code:
-            cb(f"Applying promo code {promo_code}...")
-            promo_applied = False
-
-            # Wait for the cart to fully render before touching the promo section.
-            # Angular SPA can still be painting after networkidle fires.
-            try:
-                page.get_by_text(
-                    re.compile(r"promo code", re.IGNORECASE)
-                ).first.wait_for(state="visible", timeout=15000)
-                _log.info("Promo: cart promo section visible")
-            except Exception as e:
-                _log.warning("Promo: timed out waiting for promo section: %s", e)
-
-            # Step 1: Click "Use Promo Code" to reveal the input
-            _log.info("Promo: looking for 'Use Promo Code' trigger on %s", page.url)
-            _PROMO_TEXT = re.compile(r"use promo code|promo code|have a promo|enter.*code", re.IGNORECASE)
-            try:
-                cnt = 0
-                for role in ("link", "button"):
-                    link = page.get_by_role(role, name=_PROMO_TEXT)
-                    cnt = link.count()
-                    _log.info("Promo: get_by_role(%r) count=%d", role, cnt)
-                    if cnt > 0:
-                        break
-                if cnt == 0:
-                    link = page.locator(
-                        'ion-button, ion-item, ion-label, a, button'
-                    ).filter(has_text=_PROMO_TEXT)
-                    cnt = link.count()
-                    _log.info("Promo: ionic selector count=%d", cnt)
-                if cnt == 0:
-                    link = page.get_by_text(_PROMO_TEXT)
-                    cnt = link.count()
-                    _log.info("Promo: get_by_text count=%d", cnt)
-                if cnt > 0:
-                    link.first.click(timeout=5000)
-                    _log.info("Promo: trigger clicked")
-                else:
-                    _log.warning("Promo: trigger not found — input may already be visible")
-            except Exception as e:
-                _log.warning("Promo: trigger step failed: %s", e)
-
-            # Step 2: Fill and submit
-            # Ionic renders ion-input as a native <input class="native-input"> internally.
-            # Exclude checkboxes/radios explicitly — the cart has ~20 hidden checkbox inputs
-            # (ion-checkbox components) that would otherwise be matched by broad selectors.
-            _PROMO_INPUT_SEL = (
-                'ion-input input[type="text"], '
-                'ion-input input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="email"]):not([type="password"]), '
-                'input[type="text"], '
-                'input[placeholder*="romo" i], '
-                'input[placeholder*="ode" i]'
+            # ── 3. Get cart item + available start dates ──────────────────────
+            cb("Loading class details...")
+            cart_item = _api_get(
+                f"new-cart-item/class-enrollment/{class_id}",
+                {"locationId": "", "studentId": student_id},
+                token,
             )
-            try:
-                promo_input = page.locator(_PROMO_INPUT_SEL).last
-                _log.info("Promo: waiting for input to be visible")
-                promo_input.wait_for(state="visible", timeout=8000)
-                _log.info("Promo: input visible, filling code")
-                promo_input.click()
-                promo_input.fill(promo_code)
+            dates = (cart_item.get("startDates")
+                     or cart_item.get("availableStartDates")
+                     or cart_item.get("sessions")
+                     or [])
+            if not dates:
+                raise Exception("Could not add to cart — you may already be enrolled in this class.")
+            date_val = dates[0].get("startDate") or dates[0].get("date") or str(dates[0])
 
-                # Step 3: Click the submit button (arrow).
-                # xpath '../..//button' is confirmed working — try it first,
-                # then fall back to CSS siblings with short timeouts.
-                submit_clicked = False
-                for xpath in [
-                    '../..//button', '../..//ion-button',
-                    '../button', '../ion-button',
-                    '../../..//button', '../../..//ion-button',
-                ]:
-                    try:
-                        promo_input.locator(f'xpath={xpath}').first.click(timeout=1000)
-                        submit_clicked = True
-                        _log.info("Promo: submit via xpath '%s'", xpath)
-                        break
-                    except Exception:
-                        pass
-                if not submit_clicked:
-                    for btn_sel in [
-                        'ion-input ~ button', 'ion-input ~ ion-button',
-                        'input[type="text"] ~ button', 'input[type="text"] ~ ion-button',
-                    ]:
-                        try:
-                            page.locator(btn_sel).last.click(timeout=500)
-                            submit_clicked = True
-                            _log.info("Promo: submit via CSS '%s'", btn_sel)
-                            break
-                        except Exception:
-                            pass
-                if not submit_clicked:
-                    _log.warning("Promo: no submit button found — pressing Enter")
-                    promo_input.press("Enter")
+            # ── 4. Get cart item pinned to specific date ──────────────────────
+            cb("Selecting start date...")
+            cart_item_dated = _api_get(
+                f"new-cart-item/class-enrollment/{class_id}",
+                {"locationId": "", "studentId": student_id, "date": date_val},
+                token,
+            )
+            _log.info("Cart item dated: %s", str(cart_item_dated)[:300])
 
-                # Wait for DOM to reflect promo result — this is sufficient, no need for networkidle.
-                # wait_for_function checks document.body.innerText directly, so if it returns
-                # true the Angular render is already done. Saves ~7s vs networkidle-first.
-                try:
-                    page.wait_for_function(
-                        """() => {
-                            const b = (document.body.innerText || '').toLowerCase();
-                            return b.includes('promo applied') || b.includes('invalid promo') ||
-                                   b.includes('code not found') || b.includes('not a valid') ||
-                                   b.includes('code has expired') || b.includes('cannot be applied') ||
-                                   b.includes('not applicable') || b.includes('invalid code');
-                        }""",
-                        timeout=10000,
+            # ── 5. Validate cart item ─────────────────────────────────────────
+            cb("Validating cart item...")
+            validate_result = _api_post("validate-cart-item", {}, token, body=cart_item_dated)
+            _log.info("validate-cart-item response: %s", str(validate_result)[:300])
+            v_errors = validate_result.get("errors") or []
+            if v_errors:
+                raise Exception(f"Could not add to cart — {v_errors[0]}")
+
+            # ── 6. Add to cart ────────────────────────────────────────────────
+            cb("Adding to cart...")
+            add_result = _api_post("add-cart-item", {}, token, body=cart_item_dated)
+            _log.info("add-cart-item response: %s", str(add_result)[:300])
+            a_errors = add_result.get("errors") or []
+            if a_errors and not add_result.get("success"):
+                raise Exception(f"Could not add to cart — {a_errors[0]}")
+
+            # ── 7. Apply promo ────────────────────────────────────────────────
+            if promo_code:
+                cb(f"Applying promo code {promo_code}...")
+                promo_result = _api_post("add-promo-code", {}, token, body={
+                    "promoCode": promo_code,
+                    "promoCodes": [],
+                })
+                _log.info("add-promo-code response: %s", str(promo_result)[:300])
+                p_errors = promo_result.get("errors") or []
+                p_promos = (promo_result.get("data") or {}).get("cartItemPromoCodes") or []
+                if p_errors:
+                    raise Exception(
+                        f"Promo code '{promo_code}' was rejected by iClassPro — "
+                        "registration cancelled to avoid a full-price charge."
                     )
+                if not p_promos:
+                    raise Exception(
+                        f"Couldn't apply promo code '{promo_code}' automatically — "
+                        "registration cancelled. Please try again."
+                    )
+                _log.info("Promo: SUCCESS")
+
+            if dry_run:
+                cb("Dry run complete — stopping before checkout.")
+                return "dry_run"
+
+            # ── 8. Fetch payment method + final cart total ────────────────────
+            cb("Completing checkout...")
+            pm_resp = _api_get("family-payment-method", {}, token)
+            pm_list = pm_resp.get("paymentMethods") or (pm_resp.get("data") or {}).get("paymentMethods") or []
+            primary = next((p for p in pm_list if p.get("isPrimary")), pm_list[0] if pm_list else None)
+            pm_id   = str(primary["id"]) if primary else "3805"
+
+            cart_final = _api_get("validate-cart/1", {}, token)
+            total = (cart_final.get("data") or cart_final).get("totalCartAmount") or 0
+
+            # ── 9. Refresh token immediately before checkout ──────────────────
+            token = _api_refresh(token)
+            _cache_token(email, token)
+
+            # ── 10. Process cart (the actual checkout) ────────────────────────
+            checkout_result = _api_post("process-cart/1", {}, token, body={
+                "useCardOnFile":      True,
+                "paymentAmount":      total,
+                "paymentTotal":       total,
+                "paymentType":        "",
+                "useAccountCredit":   False,
+                "paymentMethodId":    pm_id,
+                "guestCheckoutName":  None,
+                "guestCheckoutPhone": None,
+                "guestCheckoutEmail": None,
+                "technologyFeeAmount": 0,
+            })
+            _log.info("process-cart response: %s", str(checkout_result)[:300])
+
+            inner = checkout_result.get("data") or checkout_result
+            c_errors = inner.get("errors") or checkout_result.get("errors") or []
+            if c_errors and not inner.get("success", True):
+                raise Exception(f"Could not complete checkout — {c_errors[0]}")
+
+            _log.info("Checkout: SUCCESS")
+            if on_checkout_confirmed:
+                try:
+                    on_checkout_confirmed({})
                 except Exception:
                     pass
+            return {}
 
-                # Step 4: Verify success
-                body = page.inner_text("body").lower()
-                has_promo_applied = "promo applied" in body
-                has_code_name    = promo_code.lower() in body
-                _log.info("Promo: body check — 'promo applied'=%s, code_in_body=%s",
-                          has_promo_applied, has_code_name)
-                if has_promo_applied or has_code_name:
-                    promo_applied = True
-                    _log.info("Promo: SUCCESS")
-                else:
-                    reject_phrases = [
-                        "invalid promo", "promo code is not valid", "code is not valid",
-                        "code not found", "not a valid", "code has expired", "code expired",
-                        "cannot be applied", "not applicable", "invalid code",
-                    ]
-                    if any(p in body for p in reject_phrases):
-                        raise Exception(
-                            f"Promo code '{promo_code}' was rejected by iClassPro — "
-                            "registration cancelled to avoid a full-price charge."
-                        )
-                    _log.warning("Promo: neither confirmed nor rejected — treating as unconfirmed")
-
-            except Exception as e:
-                _log.warning("Promo: exception in fill/submit: %s", e)
-                if "rejected" in str(e):
-                    raise  # Real rejection — surface immediately
-
-            if not promo_applied:
-                # The cart lives in the server's browser — the user can't access it
-                # to apply the promo manually, so just cancel and let them retry.
-                raise Exception(
-                    f"Couldn't apply promo code '{promo_code}' automatically — "
-                    "registration cancelled. Please try again."
-                )
-
-        if dry_run:
-            cb("Dry run complete — stopping before checkout.")
-            return "dry_run"
-
-        cb("Completing checkout...")
-        # On mobile Ionic, multiple overlays/panels can stack up by checkout time.
-        # Press Escape a few times to collapse any open drawers or modals before proceeding.
-        for _ in range(3):
-            try:
-                page.keyboard.press("Escape")
-                page.wait_for_timeout(300)
-            except Exception:
-                pass
-
-        # Dismiss any "Update Now!" / "Maybe Later" app-update popups that block checkout.
-        # Must use broad locator — these are ion-buttons, not <button>, so get_by_role misses them.
-        for dismiss_text in ["Maybe Later", "Update Now!"]:
-            try:
-                btn = page.locator('button, ion-button, [role="button"]').filter(
-                    has_text=re.compile(dismiss_text, re.IGNORECASE)
-                )
-                if btn.first.is_visible():
-                    btn.first.click(timeout=3000)
-                    _log.info("Checkout: dismissed popup '%s'", dismiss_text)
-                    page.wait_for_timeout(500)
-                    break
-            except Exception:
-                pass
-
-        _CHECKOUT_RE = re.compile(
-            r"complete.transaction|checkout|check.out|process|submit|pay|complete|confirm|register|enroll|book|continue|next|place.order",
-            re.IGNORECASE,
-        )
-        _COMPLETE_TRANSACTION_RE = re.compile(r"complete.transaction", re.IGNORECASE)
-        checkout_clicked = False
-        # Try "Complete Transaction" specifically first — broad regex can match "Continue"
-        # or "Process" earlier in the DOM and click the wrong button on mobile.
-        try:
-            page.locator(
-                'button, ion-button, ion-item, a, [role="button"]'
-            ).filter(has_text=_COMPLETE_TRANSACTION_RE).first.click(timeout=10000)
-            checkout_clicked = True
-            _log.info("Checkout: clicked via Complete Transaction specific match")
-        except Exception:
-            pass
-        # Try role=button with broad regex
-        if not checkout_clicked:
-            try:
-                page.get_by_role("button", name=_CHECKOUT_RE).first.click(timeout=10000)
-                checkout_clicked = True
-            except Exception:
-                pass
-        # Broad Ionic selector fallback
-        if not checkout_clicked:
-            try:
-                page.locator(
-                    'button, ion-button, ion-item, a, [role="button"]'
-                ).filter(has_text=_CHECKOUT_RE).first.click(timeout=10000)
-                checkout_clicked = True
-            except Exception:
-                pass
-        # Last resort: any visible button not already used for promo/cart operations
-        if not checkout_clicked:
-            try:
-                page.get_by_text(_CHECKOUT_RE).first.click(timeout=5000)
-                checkout_clicked = True
-            except Exception:
-                pass
-        if not checkout_clicked:
-            # Log visible buttons to help diagnose future failures
-            try:
-                btns = page.locator('button, ion-button').all_text_contents()
-                _log.error("Checkout: no button matched. Visible buttons: %s", btns)
-            except Exception:
-                pass
-            raise Exception("Could not complete checkout automatically.")
-
-        left_cart = False
-        try:
-            page.wait_for_function("!window.location.href.includes('/cart')", timeout=30000)
-            left_cart = True
-        except PlaywrightTimeout:
-            _log.warning("Cart redirect timed out — checkout may still have succeeded")
-
-        # Mark the job done NOW — before browser.close() — so a SIGTERM
-        # during browser cleanup can't overwrite the status to "error".
-        if left_cart and on_checkout_confirmed:
-            try:
-                on_checkout_confirmed({})
-            except Exception:
-                pass
-
-    return {}
+        except Exception as e:
+            if attempt == 0 and ("401" in str(e) or "403" in str(e) or "Unauthorized" in str(e)):
+                _invalidate_token(email)
+                cb("Session expired — logging in again...")
+                token = _browser_get_token(email, password, cb)
+                if not token:
+                    raise Exception("Could not refresh session — please try again.")
+                _cache_token(email, token)
+                continue
+            raise
