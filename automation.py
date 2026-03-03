@@ -10,6 +10,7 @@ import os
 import re
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
@@ -264,11 +265,21 @@ def _api_url(path, params, token):
     return f"https://app.iclasspro.com/api/jwt/v1/{path}?{urllib.parse.urlencode(p)}"
 
 
+def _api_call(req, path):
+    """Execute a urllib request, logging response body on HTTP errors."""
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:400]
+        _log.error("HTTP %s from %s — body: %s", e.code, path, body)
+        raise Exception(f"HTTP {e.code} from {path}: {body}")
+
+
 def _api_get(path, params, token):
     """Direct HTTP GET to iClassPro JWT API."""
     req = urllib.request.Request(_api_url(path, params, token), headers=_API_HEADERS)
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read())
+    return _api_call(req, path)
 
 
 def _api_post(path, params, token, body=None):
@@ -278,8 +289,7 @@ def _api_post(path, params, token, body=None):
         _api_url(path, params, token), data=data, method="POST",
         headers={**_API_HEADERS, "Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read())
+    return _api_call(req, path)
 
 
 def _api_delete(path, params, token):
@@ -287,8 +297,7 @@ def _api_delete(path, params, token):
     req = urllib.request.Request(
         _api_url(path, params, token), method="DELETE", headers=_API_HEADERS,
     )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read())
+    return _api_call(req, path)
 
 
 def _api_refresh(token):
