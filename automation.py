@@ -436,11 +436,14 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 {"locationId": "", "studentId": student_id},
                 token,
             )
-            dates = (cart_item.get("startDates")
-                     or cart_item.get("availableStartDates")
-                     or cart_item.get("sessions")
+            _log.info("new-cart-item raw response: %s", str(cart_item)[:500])
+            cart_item_data = cart_item.get("data") or cart_item
+            dates = (cart_item_data.get("startDates")
+                     or cart_item_data.get("availableStartDates")
+                     or cart_item_data.get("sessions")
                      or [])
             if not dates:
+                _log.warning("No start dates in response — full response: %s", str(cart_item)[:500])
                 raise Exception("Could not add to cart — you may already be enrolled in this class.")
             date_val = dates[0].get("startDate") or dates[0].get("date") or str(dates[0])
 
