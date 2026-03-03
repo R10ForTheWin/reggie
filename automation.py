@@ -455,6 +455,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 _log.warning("No start dates in response — full response: %s", str(cart_item)[:500])
                 raise Exception("Could not add to cart — you may already be enrolled in this class.")
             date_val = dates[0].get("startDate") or dates[0].get("date") or str(dates[0])
+            _log.info("Selected date: %s", date_val)
 
             # ── 4. Get cart item pinned to specific date ──────────────────────
             cb("Selecting start date...")
@@ -510,11 +511,13 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             # ── 8. Fetch payment method + final cart total ────────────────────
             cb("Completing checkout...")
             pm_resp = _api_get("family-payment-method", {}, token)
+            _log.info("family-payment-method response: %s", str(pm_resp)[:300])
             pm_list = pm_resp.get("paymentMethods") or (pm_resp.get("data") or {}).get("paymentMethods") or []
             primary = next((p for p in pm_list if p.get("isPrimary")), pm_list[0] if pm_list else None)
             pm_id   = str(primary["id"]) if primary else "3805"
 
             cart_final = _api_get("validate-cart/1", {}, token)
+            _log.info("validate-cart final response: %s", str(cart_final)[:400])
             total = (cart_final.get("data") or cart_final).get("totalCartAmount") or 0
 
             # ── 9. Refresh token immediately before checkout ──────────────────
@@ -522,7 +525,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             _cache_token(email, token)
 
             # ── 10. Process cart (the actual checkout) ────────────────────────
-            checkout_result = _api_post("process-cart/1", {}, token, body={
+            process_body = {
                 "useCardOnFile":      True,
                 "paymentAmount":      total,
                 "paymentTotal":       total,
@@ -533,7 +536,9 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 "guestCheckoutPhone": None,
                 "guestCheckoutEmail": None,
                 "technologyFeeAmount": 0,
-            })
+            }
+            _log.info("process-cart request body: %s", process_body)
+            checkout_result = _api_post("process-cart/1", {}, token, body=process_body)
             _log.info("process-cart response: %s", str(checkout_result)[:300])
 
             inner = checkout_result.get("data") or checkout_result
