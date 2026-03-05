@@ -530,16 +530,18 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 token,
             )
             _log.info("Cart item dated: %s", str(cart_item_dated)[:600])
-            # Unwrap data wrapper; inject studentId so iClassPro knows whose cart to populate
-            cart_item_dated_body = dict(
-                cart_item_dated.get("data") or cart_item_dated,
-                studentId=int(student_id),
-            )
-            _log.info("validate/add-cart-item body: %s", str(cart_item_dated_body)[:600])
+            dated_data = cart_item_dated.get("data") or cart_item_dated
+            dated_cart_item_id = dated_data.get("cartItemId")
+            _log.info("Using dated cartItemId: %s", dated_cart_item_id)
+
+            # Minimal body — the server stores all cart state by cartItemId when
+            # GET /new-cart-item?date=... is called; just reference it by ID.
+            cart_post_body = {"cartItemId": dated_cart_item_id}
+            _log.info("validate/add-cart-item body: %s", cart_post_body)
 
             # ── 5. Validate cart item ─────────────────────────────────────────
             cb("Validating cart item...")
-            validate_result = _api_post("validate-cart-item", {}, token, body=cart_item_dated_body)
+            validate_result = _api_post("validate-cart-item", {}, token, body=cart_post_body)
             _log.info("validate-cart-item response: %s", str(validate_result)[:600])
             v_errors = validate_result.get("errors") or []
             if v_errors:
@@ -547,7 +549,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
             # ── 6. Add to cart ────────────────────────────────────────────────
             cb("Adding to cart...")
-            add_result = _api_post("add-cart-item", {}, token, body=cart_item_dated_body)
+            add_result = _api_post("add-cart-item", {}, token, body=cart_post_body)
             _log.info("add-cart-item response: %s", str(add_result)[:600])
             a_errors = add_result.get("errors") or []
             if a_errors and not add_result.get("success"):
