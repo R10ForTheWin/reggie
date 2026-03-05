@@ -507,17 +507,20 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             )
             _log.info("new-cart-item raw response: %s", str(cart_item)[:500])
             cart_item_data = cart_item.get("data") or cart_item
-            dates = (cart_item_data.get("startDates")
-                     or cart_item_data.get("availableStartDates")
-                     or cart_item_data.get("sessions")
-                     or [])
-            if not dates:
-                _log.warning("No start dates in response — full response: %s", str(cart_item)[:500])
+            # cartItemDetails.startDate is the actual practice date (e.g. 2026-03-05 for Thursday).
+            # startDates[] contains session registration window starts (e.g. 2026-03-02 = Mon) — wrong.
+            details = cart_item_data.get("cartItemDetails") or {}
+            date_val = details.get("startDate") or cart_item_data.get("startDate") or ""
+            if not date_val:
+                # Last resort: fall back to startDates array
+                dates = (cart_item_data.get("startDates")
+                         or cart_item_data.get("availableStartDates")
+                         or cart_item_data.get("sessions") or [])
+                if dates:
+                    date_val = dates[0].get("startDate") or dates[0].get("date") or str(dates[0])
+            if not date_val:
                 raise Exception("Could not add to cart — you may already be enrolled in this class.")
-            # Use the first date iClassPro returns — it's the session start date,
-            # which may be in the past for a currently-active weekly session.
-            date_val = dates[0].get("startDate") or dates[0].get("date") or str(dates[0])
-            _log.info("Selected date: %s (%d dates available)", date_val, len(dates))
+            _log.info("Selected date: %s", date_val)
 
             # ── 4. Get cart item pinned to specific date ──────────────────────
             cb("Selecting start date...")
