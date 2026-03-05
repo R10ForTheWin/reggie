@@ -336,6 +336,10 @@ def _api_login(email, password):
         else:
             _log.warning("Direct API login: no token in response: %s", str(result)[:200])
         return tok
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:300]
+        _log.warning("Direct API login HTTP %s: %s", e.code, body)
+        return None
     except Exception as e:
         _log.warning("Direct API login failed: %s", e)
         return None
@@ -392,7 +396,7 @@ def _get_token(email, password, cb):
     if tok:
         return tok
     _log.warning("Direct API login failed — falling back to browser login")
-    cb("Opening browser to log in (may take 1–2 min)...")
+    cb("Opening browser to log in... (much faster after login is cached)")
     return _get_token(email, password, cb)
 
 
@@ -463,7 +467,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
     if token:
         cb("Using saved session...")
     else:
-        cb("Logging in (first time — may take 1–2 minutes)...")
+        cb("Logging in... (much faster after login is cached)")
         token = _get_token(email, password, cb)
         if not token:
             raise Exception("Could not capture session token — please try again.")
