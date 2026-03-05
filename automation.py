@@ -514,22 +514,10 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             if not dates:
                 _log.warning("No start dates in response — full response: %s", str(cart_item)[:500])
                 raise Exception("Could not add to cart — you may already be enrolled in this class.")
-            # Pick the first date that is today or in the future
-            import datetime as _dt
-            _today = _dt.date.today().isoformat()
-            _upcoming = [d for d in dates if (d.get("startDate") or d.get("date") or "") >= _today]
-            if not _upcoming:
-                # Fall back to the cart item's own startDate field (present when useStartDate=False)
-                _item_start = cart_item_data.get("startDate", "")
-                if _item_start and _item_start >= _today:
-                    date_val = _item_start
-                    _log.info("No upcoming dates in startDates array — using cart item startDate: %s", date_val)
-                else:
-                    raise Exception("No upcoming sessions available for this class — the next practice may not be open for registration yet.")
-            else:
-                date_val = _upcoming[0].get("startDate") or _upcoming[0].get("date") or str(_upcoming[0])
-            _log.info("Selected date: %s (today=%s, %d dates available, %d upcoming)",
-                      date_val, _today, len(dates), len(_upcoming))
+            # Use the first date iClassPro returns — it's the session start date,
+            # which may be in the past for a currently-active weekly session.
+            date_val = dates[0].get("startDate") or dates[0].get("date") or str(dates[0])
+            _log.info("Selected date: %s (%d dates available)", date_val, len(dates))
 
             # ── 4. Get cart item pinned to specific date ──────────────────────
             cb("Selecting start date...")
