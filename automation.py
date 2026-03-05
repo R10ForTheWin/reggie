@@ -480,7 +480,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
     if token:
         cb("Using saved session...")
     else:
-        cb("Logging in... (much faster after login is cached)")
+        cb("Logging In. Takes ~90 seconds initially but much faster once login is cached")
         token = _get_token(email, password, cb)
         if not token:
             raise Exception("Could not capture session token — please try again.")
