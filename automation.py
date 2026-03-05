@@ -529,18 +529,18 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 {"locationId": "", "studentId": student_id, "date": date_val},
                 token,
             )
-            _log.info("Cart item dated: %s", str(cart_item_dated)[:300])
+            _log.info("Cart item dated: %s", str(cart_item_dated)[:600])
             # Unwrap data wrapper; inject studentId so iClassPro knows whose cart to populate
             cart_item_dated_body = dict(
                 cart_item_dated.get("data") or cart_item_dated,
                 studentId=int(student_id),
             )
-            _log.info("cart-item body (keys): %s", list(cart_item_dated_body.keys()))
+            _log.info("validate/add-cart-item body: %s", str(cart_item_dated_body)[:600])
 
             # ── 5. Validate cart item ─────────────────────────────────────────
             cb("Validating cart item...")
             validate_result = _api_post("validate-cart-item", {}, token, body=cart_item_dated_body)
-            _log.info("validate-cart-item response: %s", str(validate_result)[:300])
+            _log.info("validate-cart-item response: %s", str(validate_result)[:600])
             v_errors = validate_result.get("errors") or []
             if v_errors:
                 raise Exception(f"Could not add to cart — {v_errors[0]}")
@@ -548,7 +548,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             # ── 6. Add to cart ────────────────────────────────────────────────
             cb("Adding to cart...")
             add_result = _api_post("add-cart-item", {}, token, body=cart_item_dated_body)
-            _log.info("add-cart-item response: %s", str(add_result)[:300])
+            _log.info("add-cart-item response: %s", str(add_result)[:600])
             a_errors = add_result.get("errors") or []
             if a_errors and not add_result.get("success"):
                 raise Exception(f"Could not add to cart — {a_errors[0]}")
