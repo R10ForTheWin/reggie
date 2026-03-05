@@ -530,8 +530,12 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 token,
             )
             _log.info("Cart item dated: %s", str(cart_item_dated)[:300])
-            # Unwrap data wrapper — iClassPro expects the inner object as POST body
-            cart_item_dated_body = cart_item_dated.get("data") or cart_item_dated
+            # Unwrap data wrapper; inject studentId so iClassPro knows whose cart to populate
+            cart_item_dated_body = dict(
+                cart_item_dated.get("data") or cart_item_dated,
+                studentId=int(student_id),
+            )
+            _log.info("cart-item body (keys): %s", list(cart_item_dated_body.keys()))
 
             # ── 5. Validate cart item ─────────────────────────────────────────
             cb("Validating cart item...")
