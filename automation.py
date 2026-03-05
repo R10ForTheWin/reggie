@@ -498,51 +498,72 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 _api_delete("remove-all-cart-items", {}, token)
                 _log.info("Cart: cleared")
 
-            # ── 3. Get cart item + available start dates ──────────────────────
+            # ── 3. Get cart item + session info ───────────────────────────────
             cb("Loading class details...")
             cart_item = _api_get(
                 f"new-cart-item/class-enrollment/{class_id}",
-                {"locationId": "", "studentId": student_id},
+                {"locationId": 1, "studentId": student_id},
                 token,
             )
             _log.info("new-cart-item raw response: %s", str(cart_item)[:500])
             cart_item_data = cart_item.get("data") or cart_item
-            # cartItemDetails.startDate is the actual practice date (e.g. 2026-03-05 for Thursday).
-            # startDates[] contains session registration window starts (e.g. 2026-03-02 = Mon) — wrong.
             details = cart_item_data.get("cartItemDetails") or {}
-            date_val = details.get("startDate") or cart_item_data.get("startDate") or ""
-            if not date_val:
-                # Last resort: fall back to startDates array
-                dates = (cart_item_data.get("startDates")
-                         or cart_item_data.get("availableStartDates")
-                         or cart_item_data.get("sessions") or [])
-                if dates:
-                    date_val = dates[0].get("startDate") or dates[0].get("date") or str(dates[0])
-            if not date_val:
+
+            # Sessions list (startDates) — passed as-is in the POST body
+            sessions_list = (cart_item_data.get("startDates")
+                             or cart_item_data.get("availableStartDates")
+                             or cart_item_data.get("sessions") or [])
+            if not sessions_list:
                 raise Exception("Could not add to cart — you may already be enrolled in this class.")
-            _log.info("Selected date: %s", date_val)
+            session_0 = sessions_list[0]
+            session_id = session_0.get("id") or session_0.get("sessionId")
+            session_end_date = session_0.get("endDate") or details.get("endDate")
+
+            # Practice date comes from cartItemDetails.startDate (e.g. Thu 03/05),
+            # not from session startDate (Mon 03/02 = session window start).
+            date_val = details.get("startDate") or cart_item_data.get("startDate") or session_0.get("startDate") or ""
+            if not date_val:
+                raise Exception("Could not determine class date — please try again.")
+            _log.info("Selected date: %s, sessionId: %s", date_val, session_id)
 
             # ── 4. Get cart item pinned to specific date ──────────────────────
             cb("Selecting start date...")
             cart_item_dated = _api_get(
                 f"new-cart-item/class-enrollment/{class_id}",
-                {"locationId": "", "studentId": student_id, "date": date_val},
+                {"locationId": 1, "studentId": student_id, "date": date_val},
                 token,
             )
-            _log.info("Cart item dated: %s", str(cart_item_dated)[:600])
+            _log.info("Cart item dated: %s", str(cart_item_dated)[:300])
             dated_data = cart_item_dated.get("data") or cart_item_dated
             dated_cart_item_id = dated_data.get("cartItemId")
-            _log.info("Using dated cartItemId: %s", dated_cart_item_id)
 
-            # Minimal body — the server stores all cart state by cartItemId when
-            # GET /new-cart-item?date=... is called; just reference it by ID.
-            cart_post_body = {"cartItemId": dated_cart_item_id}
-            _log.info("validate/add-cart-item body: %s", cart_post_body)
+            # Build body matching what the Angular portal sends to validate/add-cart-item
+            new_cart_item_obj = {
+                "addOns": [],
+                "blocks": [],
+                "cartItemId": dated_cart_item_id,
+                "cartItemType": "class-enrollment",
+                "endDate": session_end_date,
+                "enrollmentType": "active",
+                "objectId": str(details.get("id", "")),
+                "objectName": details.get("name", ""),
+                "recurring": False,
+                "sessionId": session_id,
+                "sessions": sessions_list,
+                "startDate": date_val,
+                "studentId": int(student_id),
+            }
+            cart_post_body = {
+                "newCartItems": [new_cart_item_obj],
+                "guestCheckoutKey": None,
+                "locationId": 1,
+            }
+            _log.info("cart POST body: %s", str(cart_post_body)[:500])
 
             # ── 5. Validate cart item ─────────────────────────────────────────
             cb("Validating cart item...")
             validate_result = _api_post("validate-cart-item", {}, token, body=cart_post_body)
-            _log.info("validate-cart-item response: %s", str(validate_result)[:600])
+            _log.info("validate-cart-item response: %s", str(validate_result)[:300])
             v_errors = validate_result.get("errors") or []
             if v_errors:
                 raise Exception(f"Could not add to cart — {v_errors[0]}")
