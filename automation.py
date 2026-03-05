@@ -409,7 +409,7 @@ def _get_token(email, password, cb):
     if tok:
         return tok
     _log.warning("Direct API login failed — falling back to browser login")
-    cb("Opening browser to log in... (much faster after login is cached)")
+    cb("Logging In. Takes ~90 seconds initially but much faster once login is cached")
     return _browser_get_token(email, password, cb)
 
 
