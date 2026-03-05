@@ -315,8 +315,12 @@ def _api_login(email, password):
     """Try direct JWT API login without browser. Returns token or None."""
     try:
         data = json.dumps({
-            "email":    email,
-            "password": password,
+            "email":                email,
+            "password":             password,
+            "type":                 "customer",
+            "account":              "scaq",
+            "guestCheckoutKey":     "1760531491",
+            "multipleLoginSupport": True,
         }).encode("utf-8")
         req = urllib.request.Request(
             "https://app.iclasspro.com/api/jwt/v1/login",
@@ -371,7 +375,9 @@ def _browser_get_token(email, password, cb):
     def on_request(req):
         try:
             if "/jwt/v1/login" in req.url and req.method == "POST":
-                _log.info("Browser login request body: %s", req.post_data)
+                body = json.loads(req.post_data or "{}")
+                body.pop("password", None)
+                _log.info("Browser login request body (password redacted): %s", body)
         except Exception:
             pass
 
@@ -508,12 +514,13 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             if not dates:
                 _log.warning("No start dates in response — full response: %s", str(cart_item)[:500])
                 raise Exception("Could not add to cart — you may already be enrolled in this class.")
-            # Pick the first date that is today or in the future; fall back to dates[0]
+            # Pick the first date that is today or in the future
             import datetime as _dt
             _today = _dt.date.today().isoformat()
             _upcoming = [d for d in dates if (d.get("startDate") or d.get("date") or "") >= _today]
-            _chosen = _upcoming[0] if _upcoming else dates[0]
-            date_val = _chosen.get("startDate") or _chosen.get("date") or str(_chosen)
+            if not _upcoming:
+                raise Exception("No upcoming sessions available for this class — the next practice may not be open for registration yet.")
+            date_val = _upcoming[0].get("startDate") or _upcoming[0].get("date") or str(_upcoming[0])
             _log.info("Selected date: %s (today=%s, %d dates available, %d upcoming)",
                       date_val, _today, len(dates), len(_upcoming))
 
