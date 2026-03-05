@@ -530,10 +530,12 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 token,
             )
             _log.info("Cart item dated: %s", str(cart_item_dated)[:300])
+            # Unwrap data wrapper — iClassPro expects the inner object as POST body
+            cart_item_dated_body = cart_item_dated.get("data") or cart_item_dated
 
             # ── 5. Validate cart item ─────────────────────────────────────────
             cb("Validating cart item...")
-            validate_result = _api_post("validate-cart-item", {}, token, body=cart_item_dated)
+            validate_result = _api_post("validate-cart-item", {}, token, body=cart_item_dated_body)
             _log.info("validate-cart-item response: %s", str(validate_result)[:300])
             v_errors = validate_result.get("errors") or []
             if v_errors:
@@ -541,7 +543,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
             # ── 6. Add to cart ────────────────────────────────────────────────
             cb("Adding to cart...")
-            add_result = _api_post("add-cart-item", {}, token, body=cart_item_dated)
+            add_result = _api_post("add-cart-item", {}, token, body=cart_item_dated_body)
             _log.info("add-cart-item response: %s", str(add_result)[:300])
             a_errors = add_result.get("errors") or []
             if a_errors and not add_result.get("success"):
