@@ -118,6 +118,41 @@
     .btn-outline  { background: transparent; color: var(--blue); border: 2px solid var(--blue); }
     .btn-lg       { font-size: 19px; padding: 20px; }
 
+    /* ── Membership toggle ── */
+    .membership-toggle {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .membership-toggle label {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 13px 10px;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: none;
+      letter-spacing: 0;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .membership-toggle input[type="radio"] { display: none; }
+    .membership-toggle input[type="radio"]:checked + span {
+      /* handled by JS to style the parent label */
+    }
+    .membership-toggle label.active {
+      border-color: var(--blue);
+      color: var(--blue);
+      background: #EBF5FF;
+    }
+
     /* ── Profile badge ── */
     .profile-badge {
       display: flex;
@@ -214,6 +249,19 @@
   <div class="content">
     <div class="card">
       <div class="form-group">
+        <label>Membership Type</label>
+        <div class="membership-toggle">
+          <label id="label-monthly" class="active" onclick="setMembership('monthly')">
+            <input type="radio" name="membership" value="monthly" checked>
+            Monthly Member
+          </label>
+          <label id="label-daily" onclick="setMembership('daily')">
+            <input type="radio" name="membership" value="daily">
+            Daily Drop-in
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
         <label>SCAQ Email</label>
         <input type="email" id="s-email" placeholder="you@example.com" autocomplete="email">
       </div>
@@ -221,8 +269,8 @@
         <label>SCAQ Password</label>
         <input type="password" id="s-password" placeholder="Your password" autocomplete="current-password">
       </div>
-      <div class="form-group" style="margin-bottom:0">
-        <label>Promo Code For Monthly Members <span class="label-note">(optional — saved for every registration)</span></label>
+      <div class="form-group" id="promo-group" style="margin-bottom:0">
+        <label>Promo Code <span class="label-note">(saved for every registration)</span></label>
         <input type="text" id="s-promo" placeholder="e.g. SWIM2024" autocomplete="off" autocapitalize="characters" spellcheck="false">
       </div>
     </div>
@@ -250,7 +298,6 @@
       <button class="edit-link" onclick="openSetup()">Edit</button>
     </div>
     <button class="btn btn-primary btn-lg" onclick="startFindClasses()">Select a Pool</button>
-    <button class="btn btn-outline" id="share-btn" onclick="shareApp()" style="margin-top:12px">Share App with Teammates</button>
     <p class="note" style="margin-top:20px">Tap to browse open practices and register instantly</p>
   </div>
 </div>
@@ -294,7 +341,7 @@
       <div class="confirm-value" id="confirm-name">—</div>
       <div class="confirm-sub"  id="confirm-detail">—</div>
       <div class="divider"></div>
-      <div class="confirm-label">Promo Code</div>
+      <div class="confirm-label" id="confirm-payment-label">Promo Code</div>
       <div class="confirm-value" id="confirm-promo" style="color:var(--blue)">None</div>
     </div>
     <button class="btn btn-success" onclick="doRegister()">Register Now</button>
@@ -313,6 +360,7 @@
     <div class="result-msg" id="success-msg">Registration complete</div>
     <p id="success-tagline" style="font-size:18px;font-weight:600;color:var(--blue);margin-bottom:24px;display:none;">See you there, you sexy Mer-man</p>
     <button class="btn btn-primary result-btn" onclick="show('home')">Done</button>
+    <button class="btn btn-outline result-btn" id="share-btn" onclick="shareApp()" style="margin-top:12px">Invite Teammates</button>
   </div>
 </div>
 
@@ -356,15 +404,24 @@ function show(name) {
 // ── Profile helpers ───────────────────────────────────────────────────────
 function getProfile() {
   return {
-    email:    localStorage.getItem('reggie_email')    || '',
-    password: localStorage.getItem('reggie_password') || '',
-    promo:    localStorage.getItem('reggie_promo')    || '',
+    email:      localStorage.getItem('reggie_email')      || '',
+    password:   localStorage.getItem('reggie_password')   || '',
+    promo:      localStorage.getItem('reggie_promo')      || '',
+    membership: localStorage.getItem('reggie_membership') || 'monthly',
   };
 }
-function storeProfile(email, password, promo) {
-  localStorage.setItem('reggie_email',    email);
-  localStorage.setItem('reggie_password', password);
-  localStorage.setItem('reggie_promo',    promo);
+function storeProfile(email, password, promo, membership) {
+  localStorage.setItem('reggie_email',      email);
+  localStorage.setItem('reggie_password',   password);
+  localStorage.setItem('reggie_promo',      promo);
+  localStorage.setItem('reggie_membership', membership);
+}
+
+// ── Membership toggle ─────────────────────────────────────────────────────
+function setMembership(type) {
+  document.getElementById('label-monthly').classList.toggle('active', type === 'monthly');
+  document.getElementById('label-daily').classList.toggle('active', type === 'daily');
+  document.getElementById('promo-group').style.display = (type === 'monthly') ? '' : 'none';
 }
 
 // ── Dry run toggle ────────────────────────────────────────────────────────
@@ -390,14 +447,16 @@ function openSetup() {
   document.getElementById('s-password').value = p.password;
   document.getElementById('s-promo').value    = p.promo;
   document.getElementById('setup-err').style.display = 'none';
+  setMembership(p.membership || 'monthly');
   show('setup');
 }
 
 function saveSetup() {
-  const email    = document.getElementById('s-email').value.trim();
-  const password = document.getElementById('s-password').value;
-  const promo    = document.getElementById('s-promo').value.trim().toUpperCase();
-  const errEl    = document.getElementById('setup-err');
+  const email      = document.getElementById('s-email').value.trim();
+  const password   = document.getElementById('s-password').value;
+  const promo      = document.getElementById('s-promo').value.trim().toUpperCase();
+  const membership = document.querySelector('input[name="membership"]:checked')?.value || 'monthly';
+  const errEl      = document.getElementById('setup-err');
 
   if (!email || !password) {
     errEl.textContent = 'Email and password are required';
@@ -405,7 +464,7 @@ function saveSetup() {
     return;
   }
   errEl.style.display = 'none';
-  storeProfile(email, password, promo);
+  storeProfile(email, password, membership === 'monthly' ? promo : '', membership);
   loadHome();
   show('home');
 }
@@ -414,9 +473,13 @@ function loadHome() {
   const p = getProfile();
   document.getElementById('home-avatar').textContent = p.email ? p.email[0].toUpperCase() : '?';
   document.getElementById('home-email').textContent  = p.email || 'Not configured';
-  document.getElementById('home-promo').textContent  = p.promo
-    ? 'Promo: ' + p.promo
-    : 'No promo code saved';
+  if (p.membership === 'daily') {
+    document.getElementById('home-promo').textContent = 'Daily Drop-in';
+  } else {
+    document.getElementById('home-promo').textContent = p.promo
+      ? 'Monthly · Promo: ' + p.promo
+      : 'Monthly Member';
+  }
 }
 
 // ── HTML escaping (XSS prevention) ────────────────────────────────────────
@@ -565,8 +628,16 @@ function selectClass(id) {
 
   document.getElementById('confirm-name').textContent   = name;
   document.getElementById('confirm-detail').textContent = parts.join(' · ') || 'See class for details';
-  document.getElementById('confirm-promo').textContent  = promo || 'None';
-  document.getElementById('confirm-promo').style.color  = promo ? 'var(--success)' : 'var(--muted)';
+  const isDaily = getProfile().membership === 'daily';
+  if (isDaily) {
+    document.getElementById('confirm-payment-label').textContent = 'Payment';
+    document.getElementById('confirm-promo').textContent = 'Full drop-in fee will be charged';
+    document.getElementById('confirm-promo').style.color = 'var(--error)';
+  } else {
+    document.getElementById('confirm-payment-label').textContent = 'Promo Code';
+    document.getElementById('confirm-promo').textContent = promo || 'None';
+    document.getElementById('confirm-promo').style.color = promo ? 'var(--success)' : 'var(--muted)';
+  }
   show('confirm');
 }
 
@@ -587,7 +658,7 @@ async function doRegister() {
         password:   p.password,
         class_id:   selectedClass.id,
         student_id: studentId,
-        promo_code: p.promo || '',
+        promo_code: p.membership === 'monthly' ? (p.promo || '') : '',
         dry_run:    document.getElementById('dry-run-toggle').checked,
       }),
     });
@@ -660,6 +731,7 @@ if ('serviceWorker' in navigator) {
 // ── Init ──────────────────────────────────────────────────────────────────
 (function init() {
   const p = getProfile();
+  setMembership(p.membership || 'monthly');
   if (p.email && p.password) {
     loadHome();
     show('home');
