@@ -315,9 +315,8 @@ def _api_login(email, password):
     """Try direct JWT API login without browser. Returns token or None."""
     try:
         data = json.dumps({
-            "email":      email,
-            "password":   password,
-            "locationId": 1,
+            "email":    email,
+            "password": password,
         }).encode("utf-8")
         req = urllib.request.Request(
             "https://app.iclasspro.com/api/jwt/v1/login",
@@ -369,7 +368,15 @@ def _browser_get_token(email, password, cb):
         except Exception:
             pass
 
+    def on_request(req):
+        try:
+            if "/jwt/v1/login" in req.url and req.method == "POST":
+                _log.info("Browser login request body: %s", req.post_data)
+        except Exception:
+            pass
+
     try:
+        page.on("request", on_request)
         page.on("response", on_response)
         _login(page, email, password)
 
