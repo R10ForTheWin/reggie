@@ -404,7 +404,7 @@ def _get_token(email, password, cb):
         return tok
     _log.warning("Direct API login failed — falling back to browser login")
     cb("Opening browser to log in... (much faster after login is cached)")
-    return _get_token(email, password, cb)
+    return _browser_get_token(email, password, cb)
 
 
 
