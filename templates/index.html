@@ -509,6 +509,17 @@ async function startFindClasses() {
 // ── Class list ────────────────────────────────────────────────────────────
 function renderClasses(list) {
   const el = document.getElementById('class-list');
+  const locationOrder = {'el segundo': 0, 'culver': 1, 'santa monica': 2};
+  const sorted = [...list].sort((a, b) => {
+    const na = (a.className || a.name || '').toLowerCase();
+    const nb = (b.className || b.name || '').toLowerCase();
+    const ra = Object.entries(locationOrder).find(([k]) => na.includes(k));
+    const rb = Object.entries(locationOrder).find(([k]) => nb.includes(k));
+    const oa = ra ? ra[1] : 99;
+    const ob = rb ? rb[1] : 99;
+    return oa !== ob ? oa - ob : na.localeCompare(nb);
+  });
+  list = sorted;
   if (!list.length) {
     el.innerHTML = '<p style="text-align:center;color:var(--muted);padding:32px 0">No classes found</p>';
     return;

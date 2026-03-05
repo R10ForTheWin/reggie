@@ -156,6 +156,7 @@ def debug_screenshot():
         return "Snapshot error — check server logs", 500
 
 
+
 @app.route("/")
 def index():
     return render_template("index.html")

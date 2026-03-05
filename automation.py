@@ -311,6 +311,36 @@ def _api_refresh(token):
         return token
 
 
+def _api_login(email, password):
+    """Try direct JWT API login without browser. Returns token or None."""
+    try:
+        data = json.dumps({
+            "email":      email,
+            "password":   password,
+            "locationId": 1,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "https://app.iclasspro.com/api/jwt/v1/login",
+            data=data,
+            method="POST",
+            headers={**_API_HEADERS, "Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read())
+        tok = (result.get("token")
+               or result.get("access_token")
+               or (result.get("data") or {}).get("token")
+               or (result.get("data") or {}).get("access_token"))
+        if tok:
+            _log.info("Direct API login: SUCCESS")
+        else:
+            _log.warning("Direct API login: no token in response: %s", str(result)[:200])
+        return tok
+    except Exception as e:
+        _log.warning("Direct API login failed: %s", e)
+        return None
+
+
 def _browser_get_token(email, password, cb):
     """Log in via browser, capture JWT token and save session state."""
     captured = {"token": None}
@@ -335,23 +365,36 @@ def _browser_get_token(email, password, cb):
         except Exception:
             pass
 
-    page.on("response", on_response)
-    _login(page, email, password)
+    try:
+        page.on("response", on_response)
+        _login(page, email, password)
 
-    for _ in range(10):
+        for _ in range(10):
+            if captured["token"]:
+                break
+            page.wait_for_timeout(300)
+
+        # Only save session if login produced a valid token
         if captured["token"]:
-            break
-        page.wait_for_timeout(300)
+            try:
+                _cache_session(email, context.storage_state())
+            except Exception:
+                pass
+    finally:
+        context.close()
 
-    # Only save session if login produced a valid token
-    if captured["token"]:
-        try:
-            _cache_session(email, context.storage_state())
-        except Exception:
-            pass
-
-    context.close()
     return captured["token"]
+
+
+def _get_token(email, password, cb):
+    """Get JWT token: try direct API login first, fall back to browser."""
+    tok = _api_login(email, password)
+    if tok:
+        return tok
+    _log.warning("Direct API login failed — falling back to browser login")
+    cb("Opening browser to log in (may take 1–2 min)...")
+    return _get_token(email, password, cb)
+
 
 
 def get_classes(email, password, callback=None):
@@ -366,7 +409,7 @@ def get_classes(email, password, callback=None):
         cb("Using saved session...")
     else:
         cb("Logging in...")
-        token = _browser_get_token(email, password, cb)
+        token = _get_token(email, password, cb)
         if not token:
             raise Exception("Could not capture session token — please try again.")
         _cache_token(email, token)
@@ -400,7 +443,7 @@ def get_classes(email, password, callback=None):
                 # Token expired — invalidate and do a fresh browser login, then retry
                 _invalidate_token(email)
                 cb("Session expired — logging in again...")
-                token = _browser_get_token(email, password, cb)
+                token = _get_token(email, password, cb)
                 if not token:
                     raise Exception("Could not refresh session — please try again.")
                 _cache_token(email, token)
@@ -421,7 +464,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
         cb("Using saved session...")
     else:
         cb("Logging in (first time — may take 1–2 minutes)...")
-        token = _browser_get_token(email, password, cb)
+        token = _get_token(email, password, cb)
         if not token:
             raise Exception("Could not capture session token — please try again.")
         _cache_token(email, token)
@@ -454,8 +497,14 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             if not dates:
                 _log.warning("No start dates in response — full response: %s", str(cart_item)[:500])
                 raise Exception("Could not add to cart — you may already be enrolled in this class.")
-            date_val = dates[0].get("startDate") or dates[0].get("date") or str(dates[0])
-            _log.info("Selected date: %s", date_val)
+            # Pick the first date that is today or in the future; fall back to dates[0]
+            import datetime as _dt
+            _today = _dt.date.today().isoformat()
+            _upcoming = [d for d in dates if (d.get("startDate") or d.get("date") or "") >= _today]
+            _chosen = _upcoming[0] if _upcoming else dates[0]
+            date_val = _chosen.get("startDate") or _chosen.get("date") or str(_chosen)
+            _log.info("Selected date: %s (today=%s, %d dates available, %d upcoming)",
+                      date_val, _today, len(dates), len(_upcoming))
 
             # ── 4. Get cart item pinned to specific date ──────────────────────
             cb("Selecting start date...")
@@ -484,8 +533,12 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
 
             # ── 7. Apply promo ────────────────────────────────────────────────
             if promo_code:
+                cart_check = _api_get("validate-cart/1", {}, token)
+                _log.info("cart before promo: %s", str(cart_check)[:300])
                 cb(f"Applying promo code {promo_code}...")
-                promo_result = _api_post("add-promo-code", {}, token, body={
+                _promo_body = {"promoCode": promo_code, "promoCodes": []}
+                _log.info("add-promo-code request body: %s", _promo_body)
+                promo_result = _api_post("add-promo-code", {"locationId": 1}, token, body={
                     "promoCode": promo_code,
                     "promoCodes": [],
                 })
@@ -558,7 +611,7 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
             if attempt == 0 and ("401" in str(e) or "403" in str(e) or "Unauthorized" in str(e)):
                 _invalidate_token(email)
                 cb("Session expired — logging in again...")
-                token = _browser_get_token(email, password, cb)
+                token = _get_token(email, password, cb)
                 if not token:
                     raise Exception("Could not refresh session — please try again.")
                 _cache_token(email, token)
