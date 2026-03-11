@@ -18,6 +18,46 @@ app  = Flask(__name__)
 _jobs      = {}
 _jobs_lock = threading.Lock()
 
+_REDIRECT_TO = os.environ.get("REDIRECT_TO", "").strip()
+if _REDIRECT_TO:
+    @app.before_request
+    def _redirect_all():
+        from flask import make_response
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="5;url={_REDIRECT_TO}">
+  <title>Reggie has moved!</title>
+  <style>
+    body {{ font-family: -apple-system, sans-serif; max-width: 480px; margin: 60px auto; padding: 24px; text-align: center; background: #f5f5f5; }}
+    h1 {{ font-size: 1.6em; color: #1a1a1a; }}
+    p {{ color: #555; line-height: 1.6; }}
+    a.btn {{ display: inline-block; margin: 16px 0; padding: 14px 28px; background: #0070f3; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 1.1em; }}
+    .steps {{ text-align: left; background: white; border-radius: 12px; padding: 20px 24px; margin-top: 24px; }}
+    .steps h2 {{ font-size: 1em; margin-top: 0; }}
+    .steps ol {{ padding-left: 20px; color: #333; }}
+    .steps li {{ margin-bottom: 8px; }}
+  </style>
+</head>
+<body>
+  <h1>🚀 Reggie has a new home!</h1>
+  <p>We've moved to a faster, more reliable server. You'll be redirected automatically in 5 seconds.</p>
+  <a class="btn" href="{_REDIRECT_TO}">Go to new Reggie →</a>
+  <div class="steps">
+    <h2>📱 Re-add to your Home Screen:</h2>
+    <ol>
+      <li>Tap the button above to open the new site</li>
+      <li>Tap the <strong>Share</strong> button (box with arrow ↑) in Safari</li>
+      <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+      <li>Tap <strong>Add</strong> — done!</li>
+    </ol>
+  </div>
+</body>
+</html>"""
+        return make_response(html, 200)
+
 # Max 3 concurrent browser contexts — shared browser keeps memory manageable
 _browser_lock = threading.BoundedSemaphore(3)
 
