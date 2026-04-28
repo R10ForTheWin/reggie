@@ -243,7 +243,7 @@
 <div class="screen" id="screen-setup">
   <div class="header">
     <img src="/static/reggie.png" alt="Reggie" style="width:160px;height:160px;object-fit:cover;border-radius:50%;margin-bottom:14px;border:3px solid rgba(255,255,255,0.3);">
-    <h1>Hello Mermen!</h1>
+    <h1>Hello There!</h1>
     <p>I am Reggie, and I'm here to help you register for practice</p>
   </div>
   <div class="content">
@@ -296,6 +296,15 @@
         <div class="profile-promo" id="home-promo"></div>
       </div>
       <button class="edit-link" onclick="openSetup()">Edit</button>
+    </div>
+    <div id="install-banner" style="display:none;background:#EBF5FF;border:1.5px solid var(--blue);border-radius:14px;padding:14px 16px;margin-bottom:16px;position:relative;">
+      <button onclick="dismissInstall()" style="position:absolute;top:10px;right:12px;background:none;border:none;font-size:18px;color:var(--muted);cursor:pointer;padding:0;line-height:1;">×</button>
+      <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:6px;">📲 Add to Home Screen</div>
+      <ol style="font-size:13px;color:var(--text);padding-left:18px;margin:0;line-height:1.7;">
+        <li>Tap the <strong>Share</strong> button (box with arrow ↑)</li>
+        <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+        <li>Tap <strong>Add</strong> — done!</li>
+      </ol>
     </div>
     <button class="btn btn-primary btn-lg" onclick="startFindClasses()">Select a Pool</button>
     <p class="note" style="margin-top:20px">Tap to browse open practices and register instantly</p>
@@ -358,7 +367,7 @@
     <div class="result-icon" id="success-icon">✅</div>
     <div class="result-title">You're In!</div>
     <div class="result-msg" id="success-msg">Registration complete</div>
-    <p id="success-tagline" style="font-size:18px;font-weight:600;color:var(--blue);margin-bottom:24px;display:none;">See you there, you sexy Mer-man</p>
+    <p id="success-tagline" style="font-size:18px;font-weight:600;color:var(--blue);margin-bottom:24px;display:none;">See you there, beautiful people of the pool</p>
     <button class="btn btn-primary result-btn" onclick="show('home')">Done</button>
     <button class="btn btn-outline result-btn" id="share-btn" onclick="shareApp()" style="margin-top:12px">Invite Teammates</button>
   </div>
@@ -469,7 +478,16 @@ function saveSetup() {
   show('home');
 }
 
+function dismissInstall() {
+  localStorage.setItem('reggie_install_dismissed', '1');
+  document.getElementById('install-banner').style.display = 'none';
+}
+
 function loadHome() {
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const dismissed = localStorage.getItem('reggie_install_dismissed');
+  document.getElementById('install-banner').style.display = (!isStandalone && !dismissed) ? 'block' : 'none';
+
   const p = getProfile();
   document.getElementById('home-avatar').textContent = p.email ? p.email[0].toUpperCase() : '?';
   document.getElementById('home-email').textContent  = p.email || 'Not configured';
@@ -711,7 +729,7 @@ async function doRegister() {
 
 // ── Share ─────────────────────────────────────────────────────────────────
 function shareApp() {
-  const url = 'https://reggie-tcwk.onrender.com';
+  const url = 'https://reggie-production.up.railway.app';
   const btn = document.getElementById('share-btn');
   if (navigator.share) {
     navigator.share({ title: 'Reggie', text: 'Register for SCAQ practice fast!', url });
