@@ -2,12 +2,14 @@
 Reggie – Flask web app
 """
 
+import json
 import logging
 import os
 import re as _re
 import signal
 import threading
 import time
+import urllib.request
 import uuid
 
 logging.basicConfig(level=logging.INFO)
@@ -17,6 +19,83 @@ from flask import Flask, jsonify, redirect, render_template, request
 app  = Flask(__name__)
 _jobs      = {}
 _jobs_lock = threading.Lock()
+
+# ── Surf conditions (Manhattan Beach / Topaz St, NOAA buoy 46222) ──────────
+_surf_cache     = {"data": None, "ts": 0}
+_SURF_CACHE_TTL = 1800  # 30 min
+_MB_LAT, _MB_LON = 33.886, -118.406
+
+
+def _deg_to_cardinal(deg):
+    dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+             "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+    return dirs[round(deg / 22.5) % 16]
+
+
+def _wind_state(avg_speed_mph, avg_dir_deg):
+    if avg_speed_mph < 4:
+        return "glassy"
+    raw   = abs(avg_dir_deg - 90)
+    angle = 360 - raw if raw > 180 else raw
+    if angle < 30:  return "off"
+    if angle < 60:  return "cross-off"
+    if angle < 120: return "cross"
+    if angle < 150: return "cross-on"
+    return "on"
+
+
+def _fetch_url(url, timeout=6):
+    req = urllib.request.Request(url, headers={"User-Agent": "Reggie/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read().decode("utf-8", errors="replace")
+
+
+def _fetch_surf_data():
+    result = {"temp_f": None, "wave_ft": None, "wind_mph": None, "wind_dir": None, "wind_state": None}
+
+    try:
+        text = _fetch_url("https://www.ndbc.noaa.gov/data/realtime2/46222.txt")
+        for line in text.splitlines():
+            if line.startswith("#") or not line.strip():
+                continue
+            cols = line.split()
+            if len(cols) < 15:
+                continue
+            if result["wave_ft"] is None and cols[8] != "MM":
+                try:
+                    result["wave_ft"] = round(float(cols[8]) * 3.281 * 2) / 2
+                except ValueError:
+                    pass
+            if result["temp_f"] is None and cols[14] != "MM":
+                try:
+                    c = float(cols[14])
+                    if c < 90:
+                        result["temp_f"] = round((c * 9 / 5 + 32) * 10) / 10
+                except ValueError:
+                    pass
+            if result["wave_ft"] is not None and result["temp_f"] is not None:
+                break
+    except Exception:
+        pass
+
+    try:
+        meteo_url = (
+            "https://api.open-meteo.com/v1/forecast"
+            f"?latitude={_MB_LAT}&longitude={_MB_LON}"
+            "&current=wind_speed_10m,wind_direction_10m"
+            "&wind_speed_unit=mph&timezone=America%2FLos_Angeles"
+        )
+        cur   = json.loads(_fetch_url(meteo_url)).get("current", {})
+        speed = cur.get("wind_speed_10m")
+        deg   = cur.get("wind_direction_10m")
+        if speed is not None and deg is not None:
+            result["wind_mph"]   = round(speed)
+            result["wind_dir"]   = _deg_to_cardinal(deg)
+            result["wind_state"] = _wind_state(speed, deg)
+    except Exception:
+        pass
+
+    return result
 
 _REDIRECT_TO = os.environ.get("REDIRECT_TO", "").strip()
 if _REDIRECT_TO:
@@ -201,6 +280,17 @@ def debug_screenshot():
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/surf")
+def api_surf():
+    now = time.time()
+    if _surf_cache["data"] is not None and (now - _surf_cache["ts"]) < _SURF_CACHE_TTL:
+        return jsonify(_surf_cache["data"])
+    data = _fetch_surf_data()
+    _surf_cache["data"] = data
+    _surf_cache["ts"]   = now
+    return jsonify(data)
 
 
 @app.route("/api/classes", methods=["POST"])

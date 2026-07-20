@@ -308,6 +308,25 @@
     </div>
     <button class="btn btn-primary btn-lg" onclick="startFindClasses()">Select a Pool</button>
     <p class="note" style="margin-top:20px">Tap to browse open practices and register instantly</p>
+    <p style="margin-top:24px;margin-bottom:8px;font-size:15px;font-weight:700;color:var(--text)">Open Water Option:</p>
+    <div class="card" style="padding:0;overflow:hidden">
+      <iframe src="https://webcams.windy.com/webcams/stream/1416598082" style="width:100%;height:180px;border:0;display:block" loading="lazy" allowfullscreen title="Manhattan Beach Pier webcam"></iframe>
+      <p class="note" style="margin:10px 0 0;padding:0 12px">🌊 Manhattan Beach Pier — Live</p>
+      <div id="surf-stats" style="display:flex;justify-content:space-around;padding:12px 10px 14px;border-top:1px solid #eee;margin-top:10px">
+        <div style="text-align:center">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Temp</div>
+          <div id="surf-temp" style="font-size:17px;font-weight:700;margin-top:2px">—</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Wave</div>
+          <div id="surf-wave" style="font-size:17px;font-weight:700;margin-top:2px">—</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Wind</div>
+          <div id="surf-wind" style="font-size:17px;font-weight:700;margin-top:2px">—</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -498,6 +517,24 @@ function loadHome() {
       ? 'Monthly · Promo: ' + p.promo
       : 'Monthly Member';
   }
+  loadSurf();
+}
+
+// ── Surf conditions (Manhattan Beach) ────────────────────────────────────
+let _surfLoaded = false;
+function loadSurf() {
+  if (_surfLoaded) return;
+  _surfLoaded = true;
+  fetch('/api/surf')
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('surf-temp').textContent = d.temp_f != null ? d.temp_f + '°F' : '—';
+      document.getElementById('surf-wave').textContent = d.wave_ft != null ? d.wave_ft + 'ft' : '—';
+      document.getElementById('surf-wind').textContent = (d.wind_mph != null && d.wind_dir)
+        ? d.wind_mph + 'mph ' + d.wind_dir
+        : '—';
+    })
+    .catch(() => { _surfLoaded = false; });
 }
 
 // ── HTML escaping (XSS prevention) ────────────────────────────────────────
