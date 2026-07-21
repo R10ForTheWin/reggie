@@ -175,6 +175,7 @@ def security_headers(response):
         "img-src 'self' data:; "
         "media-src 'self'; "
         "connect-src 'self'; "
+        "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; "
         "worker-src 'self';"
     )
     return response
