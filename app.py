@@ -430,7 +430,33 @@ def api_attendance():
     data = tally.list_practices(key)
     if data is None:
         return jsonify({"enabled": True, "unavailable": True})
-    return jsonify({"enabled": True, **data})
+    # The UI's privacy wording depends on this, so it ships with every read.
+    return jsonify({"enabled": True, "sharing": tally.get_sharing(key), **data})
+
+
+@app.route("/api/attendance/sharing", methods=["POST"])
+def api_attendance_sharing():
+    """Turn team sharing on or off for this swimmer.
+
+    Off by default and never set on anyone's behalf: Artie's feed is team-wide,
+    and Reggie promises its swimmers their tally is private."""
+    body = request.json or {}
+    key  = str(body.get("key", "")).strip()
+    if not tally.enabled():
+        return jsonify({"ok": False, "error": "Tally is not configured"}), 400
+    if not tally.valid_key(key):
+        return jsonify({"ok": False, "error": "Invalid key"}), 400
+
+    want = bool(body.get("enabled"))
+    name = str(body.get("athlete_name", ""))[:80]
+    if want and not name.strip():
+        return jsonify({"ok": False,
+                        "error": "A name is needed so the crew knows whose swim it is"}), 400
+    if not tally.set_sharing(key, want, name):
+        return jsonify({"ok": False, "error": "Could not save that setting"}), 500
+
+    synced = tally.sync_all_to_artie(key) if want else 0
+    return jsonify({"ok": True, "enabled": want, "synced": synced})
 
 
 @app.route("/api/attendance/<int:practice_id>/yards", methods=["POST"])

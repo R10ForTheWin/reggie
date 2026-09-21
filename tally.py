@@ -207,14 +207,151 @@ def set_yards(key, practice_id, yards):
                 update reggie.practices
                    set yards = %s, yards_confirmed = true
                  where id = %s and user_key = %s and deleted_at is null
-                returning id
+                returning id, class_date, class_name
                 """,
                 (amount, int(practice_id), key),
             )
-            return cur.fetchone() is not None
+            row = cur.fetchone()
+            if not row:
+                return False
+            cdate, cname = row[1], row[2]
     except Exception as e:
         _log.warning("Tally yardage update failed: %s", e)
         return False
+
+    # Mirror into Artie once the number is the swimmer's own, never while it's
+    # still the 3000 default. Failures here are logged, not raised.
+    try:
+        sync_to_artie(key, cdate, amount, cname)
+    except Exception as e:
+        _log.warning("Artie sync failed after yardage update: %s", e)
+    return True
+
+
+# ── Sharing into Artie's team feed ────────────────────────────────────────
+# Artie's dashboard is team-wide and unfiltered, so a synced swim is visible to
+# the whole crew. Reggie tells swimmers "only you can see this", so sharing is
+# strictly opt-in per swimmer and off unless they turned it on themselves.
+
+_YARDS_TO_METRES = 0.9144
+
+
+def get_sharing(key):
+    """{'enabled': bool, 'athlete_name': str} for this swimmer. Defaults to off."""
+    off = {"enabled": False, "athlete_name": ""}
+    if not enabled() or not valid_key(key):
+        return off
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "select enabled, athlete_name from reggie.artie_sharing where user_key = %s",
+                (key,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return off
+            return {"enabled": bool(row[0]), "athlete_name": row[1] or ""}
+    except Exception as e:
+        _log.warning("Sharing read failed: %s", e)
+        return off
+
+
+def set_sharing(key, is_enabled, athlete_name):
+    """Turn team sharing on or off. Enabling requires a name, because that is
+    how the crew will see the swim attributed on Artie's dashboard."""
+    if not enabled() or not valid_key(key):
+        return False
+    name = (athlete_name or "").strip()[:80]
+    if is_enabled and not name:
+        return False
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into reggie.artie_sharing (user_key, athlete_name, enabled)
+                values (%s, %s, %s)
+                on conflict (user_key) do update
+                   set enabled      = excluded.enabled,
+                       athlete_name = excluded.athlete_name,
+                       updated_at   = now()
+                """,
+                (key, name or "Swimmer", bool(is_enabled)),
+            )
+        return True
+    except Exception as e:
+        _log.warning("Sharing write failed: %s", e)
+        return False
+
+
+def sync_to_artie(key, class_date, yards, class_name=None):
+    """Mirror one confirmed swim into Artie's workouts table.
+
+    No-op unless this swimmer opted in. Never raises: a sharing failure must
+    not cost the swimmer their tally entry, let alone their registration."""
+    if not enabled() or not valid_key(key):
+        return False
+    share = get_sharing(key)
+    if not share["enabled"]:
+        return False
+
+    cdate  = _parse_date(class_date)
+    amount = clamp_yards(yards)
+    if amount is None:
+        return False
+    metres    = round(amount * _YARDS_TO_METRES, 1)
+    date_text = cdate.isoformat()
+    file_name = "reggie-pool-%s" % date_text
+
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            # Don't fight a workout that's already there by hand. Reggie only
+            # ever owns rows it wrote (source='reggie'); anything the swimmer
+            # entered themselves for that day wins and is left untouched.
+            cur.execute(
+                """
+                select 1 from public.workouts
+                 where activity = 'pool_swim'
+                   and workout_date = %s
+                   and name = %s
+                   and coalesce(source, '') <> 'reggie'
+                 limit 1
+                """,
+                (date_text, share["athlete_name"]),
+            )
+            if cur.fetchone():
+                _log.info("Artie sync: manual pool_swim already logged for %s", date_text)
+                return False
+
+            cur.execute(
+                """
+                insert into public.workouts
+                    (name, file_name, file_type, workout_date,
+                     distance_m, activity, source)
+                values (%s, %s, 'Pool Swim', %s, %s, 'pool_swim', 'reggie')
+                on conflict (file_name) where source = 'reggie'
+                do update set distance_m = excluded.distance_m,
+                              name       = excluded.name
+                returning id
+                """,
+                (share["athlete_name"], file_name, date_text, metres),
+            )
+            return cur.fetchone() is not None
+    except Exception as e:
+        _log.warning("Artie sync failed (tally unaffected): %s", e)
+        return False
+
+
+def sync_all_to_artie(key):
+    """Push every confirmed practice into Artie. Used when sharing is first
+    switched on, so the crew feed isn't missing everything logged so far."""
+    data = list_practices(key)
+    if not data:
+        return 0
+    return sum(
+        1 for e in data["entries"]
+        if e["confirmed"] and e["date"]
+        and sync_to_artie(key, e["date"], e["yards"], e["name"])
+    )
 
 
 def add_practice(key, class_name=None, class_date=None, yards=None):
@@ -245,10 +382,19 @@ def add_practice(key, class_name=None, class_date=None, yards=None):
                 (key, name, cdate, starts_at, ends_at, amount),
             )
             row = cur.fetchone()
-            return row[0] if row else None
+            if not row:
+                return None
+            pid = row[0]
     except Exception as e:
         _log.warning("Tally manual add failed: %s", e)
         return None
+
+    # A manual entry is confirmed by definition, so it syncs like any other.
+    try:
+        sync_to_artie(key, cdate, amount, name)
+    except Exception as e:
+        _log.warning("Artie sync failed after manual add: %s", e)
+    return pid
 
 
 def restore_practice(key, practice_id):

@@ -412,7 +412,7 @@
         <span style="font-size:15px;font-weight:700;color:var(--blue-mid)" id="tally-yards">—</span>
         <span style="font-size:12px;color:var(--muted)"> yards in the past 12 months</span>
       </div>
-      <p class="note" style="margin:8px 0 0">🔒 Only you can see this · tap for history</p>
+      <p class="note" style="margin:8px 0 0" id="tally-card-note">🔒 Only you can see this · tap for history</p>
     </div>
     <button class="btn btn-primary btn-lg" onclick="startFindClasses()">Select a Pool</button>
     <p class="note" style="margin-top:20px">Tap to browse open practices and register instantly</p>
@@ -504,7 +504,7 @@
 <div class="screen" id="screen-tally">
   <div class="header header-sm">
     <h1>Your Practices</h1>
-    <p>Private to you — never shared with the team</p>
+    <p id="tally-privacy-sub">Private to you — never shared with the team</p>
   </div>
   <div class="content">
     <div class="period-tabs" id="tally-periods">
@@ -525,6 +525,15 @@
     <p class="note" style="margin:0 0 12px">Tap a yardage to change it · × removes a practice you skipped</p>
     <div id="tally-list"></div>
     <button class="btn btn-outline" onclick="addPracticeManually()" style="margin-top:12px">+ Add a practice</button>
+
+    <div class="card" style="margin-top:20px;padding:16px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:4px">Share swims with the Artie crew</div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px" id="share-explain">
+        Off. Your practices stay private to you.
+      </p>
+      <button class="btn btn-outline" id="share-btn-toggle" onclick="toggleSharing()" style="font-size:15px;padding:12px">Turn on sharing</button>
+    </div>
+
     <button class="btn btn-outline" onclick="show('home')" style="margin-top:12px">Back</button>
   </div>
 </div>
@@ -960,6 +969,7 @@ async function refreshTally() {
     document.getElementById('tally-year').textContent  = data.last_year;
     document.getElementById('tally-yards').textContent = nf(data.year_yards);
     card.style.display = 'block';
+    renderSharing();
     showNextYardsPrompt();
   } catch (err) {
     card.style.display = 'none';
@@ -1196,6 +1206,74 @@ async function undoDelete() {
       body:    JSON.stringify({ key: getTallyKey() }),
     });
   } catch (err) { /* next refresh reconciles */ }
+  await refreshTally();
+  renderTally();
+}
+
+// ── Sharing to Artie ──────────────────────────────────────────────────────
+// Artie's dashboard is team-wide, so this is opt-in and the privacy wording
+// throughout the app follows whatever it's actually set to.
+function renderSharing() {
+  const s = (tallyData && tallyData.sharing) || { enabled: false, athlete_name: '' };
+  const on = !!s.enabled;
+
+  const explain = document.getElementById('share-explain');
+  const btn     = document.getElementById('share-btn-toggle');
+  if (explain) {
+    explain.textContent = on
+      ? 'On. Confirmed swims appear on the Artie dashboard as "' + s.athlete_name
+        + '", where the whole crew can see them.'
+      : 'Off. Your practices stay private to you.';
+  }
+  if (btn) btn.textContent = on ? 'Turn off sharing' : 'Turn on sharing';
+
+  // Never let the app claim privacy it isn't delivering.
+  const sub = document.getElementById('tally-privacy-sub');
+  if (sub) {
+    sub.textContent = on
+      ? 'Shared with the Artie crew'
+      : 'Private to you — never shared with the team';
+  }
+  const note = document.getElementById('tally-card-note');
+  if (note) {
+    note.textContent = on
+      ? '🏄 Shared with the Artie crew · tap for history'
+      : '🔒 Only you can see this · tap for history';
+  }
+}
+
+async function toggleSharing() {
+  const key = getTallyKey();
+  if (!key) return;
+  const s  = (tallyData && tallyData.sharing) || { enabled: false, athlete_name: '' };
+  const on = !!s.enabled;
+
+  let name = s.athlete_name || '';
+  if (!on) {
+    name = prompt(
+      'Turning this on puts your confirmed swims on the Artie dashboard, '
+      + 'where the whole crew can see them.\n\nName to show them by:',
+      name || '');
+    if (name === null) return;
+    if (!name.trim()) { alert('A name is needed so the crew knows whose swim it is.'); return; }
+  }
+
+  try {
+    const res = await fetch('/api/attendance/sharing', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ key, enabled: !on, athlete_name: name }),
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Could not change that setting.'); return; }
+    if (!on && data.synced) {
+      alert('Sharing on. ' + data.synced + ' swim' + (data.synced === 1 ? '' : 's')
+            + ' sent to Artie.');
+    }
+  } catch (err) {
+    alert('Could not reach the server — please try again.');
+    return;
+  }
   await refreshTally();
   renderTally();
 }
