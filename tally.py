@@ -223,7 +223,10 @@ def delete_practice(key, practice_id):
 
 # ── Reads ─────────────────────────────────────────────────────────────────
 
-def list_practices(key, limit=500):
+def list_practices(key, limit=2000):
+    # 2000 rows is roughly a decade of swimming four times a week. The client
+    # filters by period from this one payload, so "All time" must not be a
+    # truncated view.
     """Everything this one swimmer has logged, newest first, plus rolled-up
     counts. Returns None when the tally is unavailable so the UI can stay quiet
     rather than show a wrong zero."""

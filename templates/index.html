@@ -127,6 +127,36 @@
     }
     .yard-step:active { background: var(--blue); color: #fff; }
     #yards-slider { accent-color: var(--blue); height: 28px; }
+
+    /* Period filter — five segments have to survive a narrow phone. */
+    .period-tabs {
+      display: flex;
+      gap: 4px;
+      background: #E4EEF8;
+      border-radius: 12px;
+      padding: 4px;
+      margin-bottom: 16px;
+    }
+    .period-tab {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 9px 2px;
+      border: none;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .period-tab.active {
+      background: var(--card);
+      color: var(--blue);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    }
     .btn-lg       { font-size: 19px; padding: 20px; }
 
     /* ── Membership toggle ── */
@@ -452,12 +482,19 @@
     <p>Private to you — never shared with the team</p>
   </div>
   <div class="content">
+    <div class="period-tabs" id="tally-periods">
+      <button class="period-tab" data-period="week"  onclick="setTallyPeriod('week')">Week</button>
+      <button class="period-tab" data-period="month" onclick="setTallyPeriod('month')">Month</button>
+      <button class="period-tab" data-period="ytd"   onclick="setTallyPeriod('ytd')">YTD</button>
+      <button class="period-tab" data-period="12mo"  onclick="setTallyPeriod('12mo')">12 Mo</button>
+      <button class="period-tab" data-period="all"   onclick="setTallyPeriod('all')">All</button>
+    </div>
     <div class="card" style="padding:18px;margin-bottom:16px;text-align:center">
       <div style="font-size:40px;font-weight:800;color:var(--blue);line-height:1" id="tally-big">—</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:6px">practices since <span id="tally-since">—</span></div>
+      <div style="font-size:13px;color:var(--muted);margin-top:6px">practices <span id="tally-period-label">all time</span></div>
       <div style="border-top:1px solid #eee;margin-top:14px;padding-top:12px">
         <div style="font-size:26px;font-weight:800;color:var(--blue-mid);line-height:1" id="tally-yards-big">—</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:4px">yards all time</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px">yards · <span id="tally-avg">—</span> avg</div>
       </div>
     </div>
     <p class="note" style="margin:0 0 12px">Tap a yardage to change it · × removes a practice you skipped</p>
@@ -966,6 +1003,48 @@ function editYards(id) {
   show('home');
 }
 
+// ── Period filter ─────────────────────────────────────────────────────────
+// Filtering happens on data already fetched, so switching periods is instant
+// and costs no extra database round-trip.
+const PERIODS = {
+  week:  { label: 'in the past 7 days',    days: 7   },
+  month: { label: 'in the past 30 days',   days: 30  },
+  ytd:   { label: 'so far this year',      ytd: true },
+  '12mo':{ label: 'in the past 12 months', days: 365 },
+  all:   { label: 'all time',              days: null },
+};
+let tallyPeriod = 'all';
+try { tallyPeriod = localStorage.getItem('reggie_tally_period') || 'all'; } catch (e) {}
+if (!PERIODS[tallyPeriod]) tallyPeriod = 'all';
+
+function periodCutoff(key) {
+  const p = PERIODS[key] || PERIODS.all;
+  if (p.ytd) return new Date(new Date().getFullYear(), 0, 1);
+  if (!p.days) return null;
+  const d = new Date();
+  d.setDate(d.getDate() - p.days);
+  return d;
+}
+
+function entriesInPeriod(entries, key) {
+  const cutoff = periodCutoff(key);
+  if (!cutoff) return entries;
+  return entries.filter(e => {
+    if (!e.date) return false;
+    // Parse as local midnight; `new Date('2026-09-16')` would be UTC and can
+    // slip a day behind in Pacific time.
+    const [y, m, d] = e.date.split('-').map(Number);
+    return new Date(y, m - 1, d) >= cutoff;
+  });
+}
+
+function setTallyPeriod(key) {
+  if (!PERIODS[key]) return;
+  tallyPeriod = key;
+  try { localStorage.setItem('reggie_tally_period', key); } catch (e) {}
+  renderTally();
+}
+
 function openTally() {
   renderTally();
   show('tally');
@@ -977,17 +1056,28 @@ function renderTally() {
   const d    = tallyData;
   if (!d) { list.innerHTML = ''; return; }
 
-  document.getElementById('tally-big').textContent = d.total;
-  document.getElementById('tally-yards-big').textContent = nf(d.total_yards);
-  const earliest = d.entries.length ? d.entries[d.entries.length - 1].label : '';
-  document.getElementById('tally-since').textContent = earliest || 'you started';
+  document.querySelectorAll('.period-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.period === tallyPeriod);
+  });
 
-  if (!d.entries.length) {
+  const shown = entriesInPeriod(d.entries, tallyPeriod);
+  const yards = shown.reduce((sum, e) => sum + (e.yards || 0), 0);
+
+  document.getElementById('tally-big').textContent = shown.length;
+  document.getElementById('tally-yards-big').textContent = nf(yards);
+  document.getElementById('tally-period-label').textContent = PERIODS[tallyPeriod].label;
+  document.getElementById('tally-avg').textContent =
+    shown.length ? nf(Math.round(yards / shown.length)) + ' yd' : '—';
+
+  if (!shown.length) {
     list.innerHTML = '<p style="text-align:center;color:var(--muted);padding:32px 0">'
-                   + 'No practices logged yet — register for one and it shows up here.</p>';
+                   + (d.entries.length
+                       ? 'No practices ' + esc(PERIODS[tallyPeriod].label) + '.'
+                       : 'No practices logged yet — register for one and it shows up here.')
+                   + '</p>';
     return;
   }
-  list.innerHTML = d.entries.map(e => `
+  list.innerHTML = shown.map(e => `
     <div class="class-item" style="display:flex;align-items:center;gap:12px">
       <div style="flex:1;min-width:0">
         <div class="class-name">${esc(e.name)}</div>
@@ -1003,7 +1093,7 @@ function renderTally() {
               title="I skipped this one"
               style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px 8px;line-height:1">×</button>
     </div>`).join('');
-  const anyEstimated = d.entries.some(e => !e.confirmed);
+  const anyEstimated = shown.some(e => !e.confirmed);
   if (anyEstimated) {
     list.innerHTML += '<p class="note" style="margin-top:12px">* estimated — not confirmed by you yet</p>';
   }
