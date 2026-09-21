@@ -157,6 +157,30 @@
       color: var(--blue);
       box-shadow: 0 1px 4px rgba(0,0,0,0.12);
     }
+
+    /* Undo bar — a mis-tapped delete must always be recoverable. */
+    #undo-bar {
+      display: none;
+      position: fixed;
+      left: 16px; right: 16px;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      z-index: 50;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      background: var(--blue-dark);
+      color: #fff;
+      border-radius: 14px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.28);
+      font-size: 14px;
+    }
+    #undo-bar.show { display: flex; }
+    #undo-bar span { flex: 1; min-width: 0; }
+    #undo-bar button {
+      background: none; border: none; color: #7BD3F5;
+      font-family: inherit; font-size: 15px; font-weight: 700;
+      cursor: pointer; padding: 4px 6px; flex: 0 0 auto;
+    }
     .btn-lg       { font-size: 19px; padding: 20px; }
 
     /* ── Membership toggle ── */
@@ -499,8 +523,14 @@
     </div>
     <p class="note" style="margin:0 0 12px">Tap a yardage to change it · × removes a practice you skipped</p>
     <div id="tally-list"></div>
-    <button class="btn btn-outline" onclick="show('home')" style="margin-top:8px">Back</button>
+    <button class="btn btn-outline" onclick="addPracticeManually()" style="margin-top:12px">+ Add a practice</button>
+    <button class="btn btn-outline" onclick="show('home')" style="margin-top:12px">Back</button>
   </div>
+</div>
+
+<div id="undo-bar">
+  <span id="undo-text">Practice removed</span>
+  <button onclick="undoDelete()">Undo</button>
 </div>
 
 <!-- ══════════════════════════════════════════ ERROR -->
@@ -536,6 +566,7 @@ function show(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
   window.scrollTo(0, 0);
+  if (typeof hideUndo === 'function') hideUndo();
   const corner = document.getElementById('dry-run-corner');
   if (corner) corner.style.display = (name === 'confirm') ? 'flex' : 'none';
 }
@@ -1099,9 +1130,26 @@ function renderTally() {
   }
 }
 
+// ── Delete, with undo ─────────────────────────────────────────────────────
+// Deletes are soft on the server, so an accidental tap is always recoverable.
+let lastDeletedId = null;
+let undoTimer     = null;
+
+function showUndo(name) {
+  document.getElementById('undo-text').textContent = 'Removed ' + (name || 'practice');
+  document.getElementById('undo-bar').classList.add('show');
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndo, 8000);
+}
+function hideUndo() {
+  clearTimeout(undoTimer);
+  document.getElementById('undo-bar').classList.remove('show');
+}
+
 async function removePractice(id) {
   const key = getTallyKey();
   if (!key) return;
+  const entry = (tallyData && tallyData.entries || []).find(e => e.id === id);
   // Optimistic: drop it locally, then reconcile with the server.
   if (tallyData) {
     tallyData.entries = tallyData.entries.filter(e => e.id !== id);
@@ -1114,7 +1162,65 @@ async function removePractice(id) {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ key }),
     });
+    lastDeletedId = id;
+    showUndo(entry && entry.name);
   } catch (err) { /* next refresh reconciles */ }
+  await refreshTally();
+  renderTally();
+}
+
+async function undoDelete() {
+  if (!lastDeletedId) { hideUndo(); return; }
+  const id = lastDeletedId;
+  lastDeletedId = null;
+  hideUndo();
+  try {
+    await fetch('/api/attendance/' + id + '/restore', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ key: getTallyKey() }),
+    });
+  } catch (err) { /* next refresh reconciles */ }
+  await refreshTally();
+  renderTally();
+}
+
+// ── Manual add ────────────────────────────────────────────────────────────
+// For a swim Reggie didn't register, or one deleted after undo expired.
+async function addPracticeManually() {
+  const key = getTallyKey();
+  if (!key) return;
+  const today = new Date();
+  const iso = today.getFullYear() + '-'
+            + String(today.getMonth() + 1).padStart(2, '0') + '-'
+            + String(today.getDate()).padStart(2, '0');
+
+  const date = prompt('Date of the practice (YYYY-MM-DD):', iso);
+  if (date === null) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
+    alert('Please use the format YYYY-MM-DD, e.g. ' + iso);
+    return;
+  }
+  const yardsIn = prompt('Yards swum:', '3000');
+  if (yardsIn === null) return;
+  const yards = Number(yardsIn);
+  if (!isFinite(yards) || yards < 0) { alert('Please enter a number of yards.'); return; }
+
+  const name = prompt('Name it (optional):', 'Practice');
+  if (name === null) return;
+
+  try {
+    const res = await fetch('/api/attendance/add', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ key, class_date: date.trim(), yards, class_name: name }),
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Could not add that practice.'); return; }
+  } catch (err) {
+    alert('Could not reach the server — please try again.');
+    return;
+  }
   await refreshTally();
   renderTally();
 }
@@ -1130,6 +1236,16 @@ async function removePractice(id) {
   } else {
     show('setup');
   }
+
+  // The yardage prompt unlocks 10 minutes before a practice ends, so re-check
+  // while the app is open rather than only on load — otherwise the prompt
+  // wouldn't appear until the next cold start.
+  setInterval(() => {
+    if (document.visibilityState === 'visible' && getTallyKey()) refreshTally();
+  }, 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && getTallyKey()) refreshTally();
+  });
 })();
 </script>
 </body>

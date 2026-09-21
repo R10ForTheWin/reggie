@@ -43,6 +43,22 @@ MAX_YARDS     = 30000
 # didn't give us an end time.
 _DEFAULT_DURATION = datetime.timedelta(hours=1)
 
+# Ask for yardage slightly before the practice ends, so the swimmer is still at
+# the pool and can answer on the spot rather than remembering later.
+PROMPT_LEAD = datetime.timedelta(minutes=10)
+
+# iClassPro doesn't reliably expose a start time field, but it does put the time
+# in the class name: "El Segundo: Monday 09/21 at 12:00pm".
+_NAME_TIME_RE = re.compile(r"\bat\s+(\d{1,2}:\d{2}\s*[ap]\.?m\.?)", re.IGNORECASE)
+
+
+def time_from_class_name(name):
+    """Pull '12:00pm' out of a class name. Returns None when there isn't one."""
+    if not name:
+        return None
+    m = _NAME_TIME_RE.search(str(name))
+    return _parse_time(m.group(1)) if m else None
+
 
 def _tz():
     try:
@@ -115,12 +131,13 @@ def _parse_time(raw):
     return None
 
 
-def _practice_window(class_date, start_time, end_time):
+def _practice_window(class_date, start_time, end_time, class_name=None):
     """Local start/end of one practice, as timezone-aware datetimes.
 
-    Returns (None, None) when the start time is unknown — the caller then has
-    no basis to decide the practice is over, and simply won't prompt for it."""
-    start = _parse_time(start_time)
+    iClassPro does not reliably send a start time, so fall back to the time
+    embedded in the class name before giving up. Returns (None, None) only when
+    neither source has one."""
+    start = _parse_time(start_time) or time_from_class_name(class_name)
     if not start or not class_date:
         return None, None
     tz = _tz()
@@ -151,7 +168,7 @@ def record_practice(email, class_id, class_name=None, class_date=None,
     if not key:
         return False
     cdate = _parse_date(class_date)
-    starts_at, ends_at = _practice_window(cdate, start_time, end_time)
+    starts_at, ends_at = _practice_window(cdate, start_time, end_time, class_name)
     try:
         with _connect() as conn, conn.cursor() as cur:
             cur.execute(
@@ -200,8 +217,64 @@ def set_yards(key, practice_id, yards):
         return False
 
 
+def add_practice(key, class_name=None, class_date=None, yards=None):
+    """Manually log a practice Reggie didn't register — or one deleted by
+    mistake and no longer undoable. Returns the new row id, or None."""
+    if not enabled() or not valid_key(key):
+        return None
+    cdate  = _parse_date(class_date)
+    amount = clamp_yards(yards)
+    if amount is None:
+        amount = DEFAULT_YARDS
+    name = (class_name or "").strip()[:200] or "Practice"
+    starts_at, ends_at = _practice_window(cdate, None, None, name)
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            # class_id "manual" keeps these out of the (user_key, class_id,
+            # class_date) uniqueness rule that governs real registrations,
+            # except against another manual entry on the same day.
+            cur.execute(
+                """
+                insert into reggie.practices
+                    (user_key, class_id, class_name, class_date,
+                     starts_at, ends_at, yards, yards_confirmed)
+                values (%s, 'manual', %s, %s, %s, %s, %s, true)
+                on conflict do nothing
+                returning id
+                """,
+                (key, name, cdate, starts_at, ends_at, amount),
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+    except Exception as e:
+        _log.warning("Tally manual add failed: %s", e)
+        return None
+
+
+def restore_practice(key, practice_id):
+    """Undo a delete. The row was only soft-deleted, so this is always safe."""
+    if not enabled() or not valid_key(key):
+        return False
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                update reggie.practices
+                   set deleted_at = null
+                 where id = %s and user_key = %s and deleted_at is not null
+                returning id
+                """,
+                (int(practice_id), key),
+            )
+            return cur.fetchone() is not None
+    except Exception as e:
+        _log.warning("Tally restore failed: %s", e)
+        return False
+
+
 def delete_practice(key, practice_id):
-    """Soft-delete one entry — for a class that was registered but skipped."""
+    """Soft-delete one entry — for a class that was registered but skipped.
+    Recoverable via restore_practice; nothing here ever hard-deletes."""
     if not enabled() or not valid_key(key):
         return False
     try:
@@ -268,8 +341,14 @@ def list_practices(key, limit=2000):
             year_yards += yards
         total_yards += yards
 
-        # Only ask about a practice that has actually finished.
-        is_over = bool(ends_at and ends_at <= now)
+        # Ask 10 minutes before the end, while the swimmer is still at the pool.
+        # When the class time was never captured, fall back to the day being
+        # over — a late prompt beats the silent never-prompt that NULL times
+        # used to cause.
+        if ends_at:
+            is_over = now >= (ends_at - PROMPT_LEAD)
+        else:
+            is_over = bool(cdate and cdate < today)
         entry = {
             "id":        pid,
             "name":      name or "Practice",

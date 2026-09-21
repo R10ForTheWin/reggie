@@ -450,6 +450,41 @@ def api_attendance_yards(practice_id):
     return jsonify({"ok": True, "yards": yards})
 
 
+@app.route("/api/attendance/<int:practice_id>/restore", methods=["POST"])
+def api_attendance_restore(practice_id):
+    """Undo a delete — the row is only ever soft-deleted."""
+    key = str((request.json or {}).get("key", "")).strip()
+    if not tally.enabled():
+        return jsonify({"ok": False, "error": "Tally is not configured"}), 400
+    if not tally.valid_key(key):
+        return jsonify({"ok": False, "error": "Invalid key"}), 400
+    if not tally.restore_practice(key, practice_id):
+        return jsonify({"ok": False, "error": "Entry not found"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/attendance/add", methods=["POST"])
+def api_attendance_add():
+    """Log a practice by hand — one Reggie didn't register, or one deleted by
+    mistake after the undo window passed."""
+    body = request.json or {}
+    key  = str(body.get("key", "")).strip()
+    if not tally.enabled():
+        return jsonify({"ok": False, "error": "Tally is not configured"}), 400
+    if not tally.valid_key(key):
+        return jsonify({"ok": False, "error": "Invalid key"}), 400
+    pid = tally.add_practice(
+        key,
+        class_name=str(body.get("class_name", ""))[:200],
+        class_date=str(body.get("class_date", ""))[:32],
+        yards=body.get("yards"),
+    )
+    if pid is None:
+        return jsonify({"ok": False,
+                        "error": "Could not add — is one already logged for that day?"}), 409
+    return jsonify({"ok": True, "id": pid})
+
+
 @app.route("/api/attendance/<int:practice_id>/delete", methods=["POST"])
 def api_attendance_delete(practice_id):
     """Drop a practice that was registered but skipped."""
