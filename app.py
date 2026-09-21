@@ -16,6 +16,8 @@ logging.basicConfig(level=logging.INFO)
 
 from flask import Flask, jsonify, redirect, render_template, request
 
+import tally
+
 app  = Flask(__name__)
 _jobs      = {}
 _jobs_lock = threading.Lock()
@@ -320,6 +322,9 @@ def api_classes():
             _update(jid, message="Logging in...")
             result = get_classes(email, password,
                                  callback=_make_callback(jid))
+            # Handed to the client only after a successful login, so it becomes
+            # the credential for reading this swimmer's own tally.
+            result["tally_key"] = tally.user_key(email)
             _update(jid, status="done", message="Classes loaded", result=result)
         except Exception as e:
             _update(jid, status="error", message=_safe_error(e))
@@ -340,6 +345,10 @@ def api_register():
     student_id = data.get("student_id")
     promo      = data.get("promo_code", "").strip()
     dry_run    = bool(data.get("dry_run", False))
+    # Class times come from the listing the client already rendered; they only
+    # decide when the tally may ask for yardage, so they're advisory.
+    start_time = str(data.get("start_time", ""))[:20]
+    end_time   = str(data.get("end_time", ""))[:20]
 
     if not all([email, password, class_id, student_id]):
         return jsonify({"error": "Missing required fields"}), 400
@@ -362,10 +371,27 @@ def api_register():
         try:
             from automation import run_registration
 
+            def _log_practice(result_data):
+                """Never let a tally failure surface as a registration failure —
+                the swim is booked either way."""
+                try:
+                    tally.record_practice(
+                        email, class_id,
+                        class_name=result_data.get("class_name"),
+                        class_date=result_data.get("class_date"),
+                        student_id=student_id,
+                        start_time=start_time,
+                        end_time=end_time,
+                    )
+                except Exception:
+                    app.logger.exception("Tally write failed")
+
             def _on_checkout_confirmed(result):
                 result_data = result if isinstance(result, dict) else {}
+                _log_practice(result_data)
                 _update(jid, status="done", message="Registration complete!",
-                        result={"dry_run": False, **result_data})
+                        result={"dry_run": False, "tally_key": tally.user_key(email),
+                                **result_data})
 
             result = run_registration(email, password, class_id, student_id,
                                       promo_code=promo or None,
@@ -379,8 +405,10 @@ def api_register():
             elif _get(jid)["status"] != "done":
                 # Fallback: on_checkout_confirmed wasn't reached (left_cart was False)
                 result_data = result if isinstance(result, dict) else {}
+                _log_practice(result_data)
                 _update(jid, status="done", message="Registration complete!",
-                        result={"dry_run": False, **result_data})
+                        result={"dry_run": False, "tally_key": tally.user_key(email),
+                                **result_data})
         except Exception as e:
             _update(jid, status="error", message=_safe_error(e))
         finally:
@@ -388,6 +416,51 @@ def api_register():
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"job_id": jid})
+
+
+@app.route("/api/attendance")
+def api_attendance():
+    """This swimmer's own practice log. The key is unguessable without the
+    server secret, and there is no endpoint that lists or totals across keys."""
+    key = request.args.get("key", "").strip()
+    if not tally.enabled():
+        return jsonify({"enabled": False})
+    if not tally.valid_key(key):
+        return jsonify({"error": "Invalid key"}), 400
+    data = tally.list_practices(key)
+    if data is None:
+        return jsonify({"enabled": True, "unavailable": True})
+    return jsonify({"enabled": True, **data})
+
+
+@app.route("/api/attendance/<int:practice_id>/yards", methods=["POST"])
+def api_attendance_yards(practice_id):
+    """Set the swimmer's own yardage estimate for a finished practice."""
+    body = request.json or {}
+    key  = str(body.get("key", "")).strip()
+    if not tally.enabled():
+        return jsonify({"ok": False, "error": "Tally is not configured"}), 400
+    if not tally.valid_key(key):
+        return jsonify({"ok": False, "error": "Invalid key"}), 400
+    yards = tally.clamp_yards(body.get("yards"))
+    if yards is None:
+        return jsonify({"ok": False, "error": "Invalid yardage"}), 400
+    if not tally.set_yards(key, practice_id, yards):
+        return jsonify({"ok": False, "error": "Entry not found"}), 404
+    return jsonify({"ok": True, "yards": yards})
+
+
+@app.route("/api/attendance/<int:practice_id>/delete", methods=["POST"])
+def api_attendance_delete(practice_id):
+    """Drop a practice that was registered but skipped."""
+    key = (request.json or {}).get("key", "").strip()
+    if not tally.enabled():
+        return jsonify({"ok": False, "error": "Tally is not configured"}), 400
+    if not tally.valid_key(key):
+        return jsonify({"ok": False, "error": "Invalid key"}), 400
+    if not tally.delete_practice(key, practice_id):
+        return jsonify({"ok": False, "error": "Entry not found"}), 404
+    return jsonify({"ok": True})
 
 
 @app.route("/api/job/<jid>")

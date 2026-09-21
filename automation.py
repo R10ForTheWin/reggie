@@ -645,12 +645,17 @@ def run_registration(email, password, class_id, student_id, promo_code=None, cal
                 raise Exception(f"Could not complete checkout — {c_errors[0]}")
 
             _log.info("Checkout: SUCCESS")
+            # Carried back so the caller can log this practice in the tally.
+            confirmed = {
+                "class_name": details.get("name") or "",
+                "class_date": date_val,
+            }
             if on_checkout_confirmed:
                 try:
-                    on_checkout_confirmed({})
+                    on_checkout_confirmed(confirmed)
                 except Exception:
                     pass
-            return {}
+            return confirmed
 
         except Exception as e:
             if attempt == 0 and ("401" in str(e) or "403" in str(e) or "Unauthorized" in str(e)):

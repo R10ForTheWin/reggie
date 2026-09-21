@@ -116,6 +116,17 @@
     .btn-primary  { background: var(--blue);    color: white; }
     .btn-success  { background: var(--success); color: white; }
     .btn-outline  { background: transparent; color: var(--blue); border: 2px solid var(--blue); }
+
+    /* Yardage stepper — big enough to hit reliably on a phone. */
+    .yard-step {
+      width: 46px; height: 46px; flex: 0 0 46px;
+      border: 2px solid var(--blue); border-radius: 50%;
+      background: transparent; color: var(--blue);
+      font-size: 24px; font-weight: 700; line-height: 1;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .yard-step:active { background: var(--blue); color: #fff; }
+    #yards-slider { accent-color: var(--blue); height: 28px; }
     .btn-lg       { font-size: 19px; padding: 20px; }
 
     /* ── Membership toggle ── */
@@ -306,6 +317,48 @@
         <li>Tap <strong>Add</strong> — done!</li>
       </ol>
     </div>
+    <!-- Appears once a practice has finished, asking for that day's yardage. -->
+    <div class="card" id="yards-prompt" style="display:none;padding:18px 16px;margin-bottom:16px;border:1.5px solid var(--blue)">
+      <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:2px">🏊 How'd it go?</div>
+      <div style="font-size:15px;font-weight:600" id="yards-prompt-name">Practice</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:14px" id="yards-prompt-when"></div>
+
+      <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:10px">
+        <button class="yard-step" onclick="nudgeYards(-100)" aria-label="Less yardage">−</button>
+        <div style="text-align:center;min-width:120px">
+          <div style="font-size:34px;font-weight:800;color:var(--text);line-height:1" id="yards-value">3000</div>
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px">yards</div>
+        </div>
+        <button class="yard-step" onclick="nudgeYards(100)" aria-label="More yardage">+</button>
+      </div>
+
+      <input type="range" id="yards-slider" min="0" max="10000" step="100" value="3000"
+             oninput="setYardsDisplay(this.value)" style="width:100%;margin-bottom:14px">
+
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" style="flex:1;margin:0" onclick="saveYards()">Save</button>
+        <button class="btn btn-outline" style="flex:0 0 40%;margin:0" onclick="skipYardsPrompt()">Didn't swim</button>
+      </div>
+    </div>
+
+    <div class="card" id="tally-card" style="display:none;padding:16px 16px 12px;margin-bottom:16px;cursor:pointer" onclick="openTally()">
+      <div style="display:flex;justify-content:space-around;align-items:flex-start">
+        <div style="text-align:center;flex:1">
+          <div style="font-size:26px;font-weight:800;color:var(--blue);line-height:1.1" id="tally-total">—</div>
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:4px">Practices</div>
+        </div>
+        <div style="width:1px;align-self:stretch;background:#eee"></div>
+        <div style="text-align:center;flex:1">
+          <div style="font-size:26px;font-weight:800;color:var(--text);line-height:1.1" id="tally-year">—</div>
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:4px">Past 12 Months</div>
+        </div>
+      </div>
+      <div style="border-top:1px solid #eee;margin-top:12px;padding-top:10px;text-align:center">
+        <span style="font-size:15px;font-weight:700;color:var(--blue-mid)" id="tally-yards">—</span>
+        <span style="font-size:12px;color:var(--muted)"> yards in the past 12 months</span>
+      </div>
+      <p class="note" style="margin:8px 0 0">🔒 Only you can see this · tap for history</p>
+    </div>
     <button class="btn btn-primary btn-lg" onclick="startFindClasses()">Select a Pool</button>
     <p class="note" style="margin-top:20px">Tap to browse open practices and register instantly</p>
     <p style="margin-top:24px;margin-bottom:8px;font-size:15px;font-weight:700;color:var(--text)">Open Water Option:</p>
@@ -389,6 +442,27 @@
     <p id="success-tagline" style="font-size:18px;font-weight:600;color:var(--blue);margin-bottom:24px;display:none;">See you there, beautiful people of the pool</p>
     <button class="btn btn-primary result-btn" onclick="show('home')">Done</button>
     <button class="btn btn-outline result-btn" id="share-btn" onclick="shareApp()" style="margin-top:12px">Invite Teammates</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ TALLY -->
+<div class="screen" id="screen-tally">
+  <div class="header header-sm">
+    <h1>Your Practices</h1>
+    <p>Private to you — never shared with the team</p>
+  </div>
+  <div class="content">
+    <div class="card" style="padding:18px;margin-bottom:16px;text-align:center">
+      <div style="font-size:40px;font-weight:800;color:var(--blue);line-height:1" id="tally-big">—</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:6px">practices since <span id="tally-since">—</span></div>
+      <div style="border-top:1px solid #eee;margin-top:14px;padding-top:12px">
+        <div style="font-size:26px;font-weight:800;color:var(--blue-mid);line-height:1" id="tally-yards-big">—</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px">yards all time</div>
+      </div>
+    </div>
+    <p class="note" style="margin:0 0 12px">Tap a yardage to change it · × removes a practice you skipped</p>
+    <div id="tally-list"></div>
+    <button class="btn btn-outline" onclick="show('home')" style="margin-top:8px">Back</button>
   </div>
 </div>
 
@@ -608,6 +682,8 @@ async function startFindClasses() {
         allClasses = result.classes || [];
         currentJobId = null;
         studentId  = result.student_id;
+        setTallyKey(result.tally_key);
+        refreshTally();
         renderClasses(allClasses);
         document.getElementById('search').value = '';
         document.getElementById('loading-note').style.display = 'none';
@@ -715,6 +791,9 @@ async function doRegister() {
         student_id: studentId,
         promo_code: p.membership === 'monthly' ? (p.promo || '') : '',
         dry_run:    document.getElementById('dry-run-toggle').checked,
+        // Lets the tally work out when this practice is over.
+        start_time: selectedClass.startTime || '',
+        end_time:   selectedClass.endTime   || '',
       }),
     });
     const data = await res.json();
@@ -726,6 +805,7 @@ async function doRegister() {
       msg => { document.getElementById('loading-msg').textContent = msg; },
       result => {
         document.getElementById('cancel-job-btn').style.display = 'none';
+        if (result && result.tally_key) { setTallyKey(result.tally_key); refreshTally(); }
         if (result && result.dry_run) {
           document.getElementById('success-icon').style.display = 'none';
           document.getElementById('success-tagline').style.display = 'block';
@@ -783,12 +863,179 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/static/sw.js').catch(() => {});
 }
 
+// ── Practice tally ────────────────────────────────────────────────────────
+// The key is issued by the server only after a successful login and is derived
+// from a server-side secret, so it never exposes anyone else's history.
+let tallyData = null;
+
+function getTallyKey()      { return localStorage.getItem('reggie_tally_key') || ''; }
+function setTallyKey(key)   { if (key) localStorage.setItem('reggie_tally_key', key); }
+
+const nf = n => (n || 0).toLocaleString();
+
+async function refreshTally() {
+  const key = getTallyKey();
+  const card = document.getElementById('tally-card');
+  if (!key) { card.style.display = 'none'; return; }
+  try {
+    const res  = await fetch('/api/attendance?key=' + encodeURIComponent(key));
+    const data = await res.json();
+    if (!data.enabled || data.unavailable || data.error) {
+      // Tally off or database asleep — stay quiet rather than show a false zero.
+      card.style.display = 'none';
+      hideYardsPrompt();
+      return;
+    }
+    tallyData = data;
+    document.getElementById('tally-total').textContent = data.total;
+    document.getElementById('tally-year').textContent  = data.last_year;
+    document.getElementById('tally-yards').textContent = nf(data.year_yards);
+    card.style.display = 'block';
+    showNextYardsPrompt();
+  } catch (err) {
+    card.style.display = 'none';
+  }
+}
+
+// ── Post-practice yardage prompt ──────────────────────────────────────────
+// Server decides what counts as finished (start time + the class's own
+// duration), so the phone's clock being off can't surface a prompt early.
+let promptEntry = null;
+
+function hideYardsPrompt() {
+  promptEntry = null;
+  document.getElementById('yards-prompt').style.display = 'none';
+}
+
+function showNextYardsPrompt() {
+  const pending = (tallyData && tallyData.pending) || [];
+  if (!pending.length) { hideYardsPrompt(); return; }
+  promptEntry = pending[0];
+  document.getElementById('yards-prompt-name').textContent = promptEntry.name;
+  document.getElementById('yards-prompt-when').textContent =
+    [promptEntry.label, promptEntry.time].filter(Boolean).join(' · ');
+  setYardsDisplay(promptEntry.yards || (tallyData.default_yards || 3000));
+  document.getElementById('yards-prompt').style.display = 'block';
+}
+
+function setYardsDisplay(value) {
+  const n = Math.max(0, Math.min(10000, Math.round(Number(value) / 100) * 100));
+  document.getElementById('yards-value').textContent  = nf(n);
+  document.getElementById('yards-slider').value       = n;
+}
+
+function nudgeYards(delta) {
+  setYardsDisplay(Number(document.getElementById('yards-slider').value) + delta);
+}
+
+async function saveYards() {
+  if (!promptEntry) return;
+  const id    = promptEntry.id;
+  const yards = Number(document.getElementById('yards-slider').value);
+  hideYardsPrompt();
+  try {
+    await fetch('/api/attendance/' + id + '/yards', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ key: getTallyKey(), yards }),
+    });
+  } catch (err) { /* next refresh re-prompts */ }
+  await refreshTally();
+}
+
+// "Didn't swim" removes the practice rather than logging zero yards, so the
+// count and the yardage stay consistent with each other.
+async function skipYardsPrompt() {
+  if (!promptEntry) return;
+  const id = promptEntry.id;
+  hideYardsPrompt();
+  await removePractice(id);
+}
+
+// Editing an old practice reuses the same slider, so there's one way to set
+// yardage rather than two.
+function editYards(id) {
+  const entry = (tallyData && tallyData.entries || []).find(e => e.id === id);
+  if (!entry) return;
+  promptEntry = entry;
+  document.getElementById('yards-prompt-name').textContent = entry.name;
+  document.getElementById('yards-prompt-when').textContent =
+    [entry.label, entry.time].filter(Boolean).join(' · ');
+  setYardsDisplay(entry.yards);
+  document.getElementById('yards-prompt').style.display = 'block';
+  show('home');
+}
+
+function openTally() {
+  renderTally();
+  show('tally');
+  refreshTally().then(renderTally);
+}
+
+function renderTally() {
+  const list = document.getElementById('tally-list');
+  const d    = tallyData;
+  if (!d) { list.innerHTML = ''; return; }
+
+  document.getElementById('tally-big').textContent = d.total;
+  document.getElementById('tally-yards-big').textContent = nf(d.total_yards);
+  const earliest = d.entries.length ? d.entries[d.entries.length - 1].label : '';
+  document.getElementById('tally-since').textContent = earliest || 'you started';
+
+  if (!d.entries.length) {
+    list.innerHTML = '<p style="text-align:center;color:var(--muted);padding:32px 0">'
+                   + 'No practices logged yet — register for one and it shows up here.</p>';
+    return;
+  }
+  list.innerHTML = d.entries.map(e => `
+    <div class="class-item" style="display:flex;align-items:center;gap:12px">
+      <div style="flex:1;min-width:0">
+        <div class="class-name">${esc(e.name)}</div>
+        <div class="class-meta">${esc([e.label, e.time].filter(Boolean).join(' · '))}</div>
+      </div>
+      <button onclick="event.stopPropagation();editYards(${e.id})"
+              title="Change yardage"
+              style="background:none;border:none;cursor:pointer;padding:4px 6px;text-align:right">
+        <span style="font-size:15px;font-weight:700;color:${e.confirmed ? 'var(--blue)' : 'var(--muted)'}">${nf(e.yards)}</span>
+        <span style="font-size:11px;color:var(--muted)">yd${e.confirmed ? '' : '*'}</span>
+      </button>
+      <button onclick="event.stopPropagation();removePractice(${e.id})"
+              title="I skipped this one"
+              style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px 8px;line-height:1">×</button>
+    </div>`).join('');
+  const anyEstimated = d.entries.some(e => !e.confirmed);
+  if (anyEstimated) {
+    list.innerHTML += '<p class="note" style="margin-top:12px">* estimated — not confirmed by you yet</p>';
+  }
+}
+
+async function removePractice(id) {
+  const key = getTallyKey();
+  if (!key) return;
+  // Optimistic: drop it locally, then reconcile with the server.
+  if (tallyData) {
+    tallyData.entries = tallyData.entries.filter(e => e.id !== id);
+    tallyData.total   = tallyData.entries.length;
+    renderTally();
+  }
+  try {
+    await fetch('/api/attendance/' + id + '/delete', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ key }),
+    });
+  } catch (err) { /* next refresh reconciles */ }
+  await refreshTally();
+  renderTally();
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────
 (function init() {
   const p = getProfile();
   setMembership(p.membership || 'monthly');
   if (p.email && p.password) {
     loadHome();
+    refreshTally();
     show('home');
   } else {
     show('setup');
