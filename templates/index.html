@@ -376,6 +376,7 @@
       <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:2px">🏊 How'd it go?</div>
       <div style="font-size:15px;font-weight:600" id="yards-prompt-name">Practice</div>
       <div style="font-size:13px;color:var(--muted);margin-bottom:14px" id="yards-prompt-when"></div>
+      <div id="yards-backlog" style="display:none;font-size:12px;color:var(--muted);margin:-8px 0 12px"></div>
 
       <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:10px">
         <button class="yard-step" onclick="nudgeYards(-100)" aria-label="Less yardage">−</button>
@@ -978,10 +979,24 @@ function hideYardsPrompt() {
 function showNextYardsPrompt() {
   const pending = (tallyData && tallyData.pending) || [];
   if (!pending.length) { hideYardsPrompt(); return; }
+  // Most recent unconfirmed practice. It keeps asking on every visit until the
+  // yardage is set — closing the app doesn't dismiss it, because the pending
+  // list comes from the server, not from anything stored on this device.
   promptEntry = pending[0];
   document.getElementById('yards-prompt-name').textContent = promptEntry.name;
   document.getElementById('yards-prompt-when').textContent =
     [promptEntry.label, promptEntry.time].filter(Boolean).join(' · ');
+
+  const backlog = document.getElementById('yards-backlog');
+  if (pending.length > 1) {
+    const n = pending.length - 1;
+    backlog.textContent = '+ ' + n + ' earlier practice' + (n === 1 ? '' : 's')
+                        + ' still waiting on yardage';
+    backlog.style.display = 'block';
+  } else {
+    backlog.style.display = 'none';
+  }
+
   setYardsDisplay(promptEntry.yards || (tallyData.default_yards || 3000));
   document.getElementById('yards-prompt').style.display = 'block';
 }

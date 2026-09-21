@@ -370,6 +370,10 @@ def list_practices(key, limit=2000):
         "year_yards":   year_yards,
         "default_yards": DEFAULT_YARDS,
         "entries":      entries,
-        # Oldest unconfirmed first, so the swimmer clears the backlog in order.
-        "pending":      list(reversed(pending)),
+        # Newest unconfirmed first. A practice stays here until its yardage is
+        # confirmed or it's removed — there is deliberately no expiry, so the
+        # ask survives closing the app, and persists until the swimmer answers.
+        # Newest-first matters when a backlog builds: the swim they can still
+        # remember is the one they just did, not one from three weeks ago.
+        "pending":      pending,
     }
