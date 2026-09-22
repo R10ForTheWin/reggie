@@ -427,6 +427,10 @@ def api_attendance():
         return jsonify({"enabled": False})
     if not tally.valid_key(key):
         return jsonify({"error": "Invalid key"}), 400
+    # Reconcile with Artie first, so opening the tally is all it takes. Both
+    # sides only ever write rows they own and skip a day already logged, so
+    # doing this on every read cannot double-count.
+    tally.import_from_artie(key)
     data = tally.list_practices(key)
     if data is None:
         return jsonify({"enabled": True, "unavailable": True})

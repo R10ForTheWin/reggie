@@ -535,8 +535,7 @@
         Off. Your practices stay private to you.
       </p>
       <button class="btn btn-outline" id="share-btn-toggle" onclick="toggleSharing()" style="font-size:15px;padding:12px">Turn on sharing</button>
-      <button class="btn btn-outline" id="share-btn-import" onclick="importFromArtie()" style="font-size:15px;padding:12px;margin-top:8px;display:none">Pull my swims from Artie</button>
-      <p class="note" style="margin:8px 0 0" id="import-note">Brings across swims logged in Artie. A day already here is left alone.</p>
+      <p class="note" style="margin:8px 0 0" id="import-note" style="display:none">Swims logged in Artie appear here automatically.</p>
     </div>
 
     <button class="btn btn-outline" onclick="show('home')" style="margin-top:12px">Back</button>
@@ -1232,10 +1231,8 @@ function renderSharing() {
   }
   if (btn) btn.textContent = on ? 'Turn off sharing' : 'Turn on sharing';
 
-  // Pulling needs the athlete name that sharing sets, so it only appears once on
-  const imp     = document.getElementById('share-btn-import');
+  // Artie's swims are pulled in on every read, so there is nothing to press
   const impNote = document.getElementById('import-note');
-  if (imp)     imp.style.display     = on ? '' : 'none';
   if (impNote) impNote.style.display = on ? '' : 'none';
 
   // Never let the app claim privacy it isn't delivering.
@@ -1250,32 +1247,6 @@ function renderSharing() {
     note.textContent = on
       ? '🏄 Shared with the Artie crew · tap for history'
       : '🔒 Only you can see this · tap for history';
-  }
-}
-
-async function importFromArtie() {
-  const key = getTallyKey();
-  if (!key) return;
-  const btn = document.getElementById('share-btn-import');
-  const was = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = 'Pulling…'; }
-  try {
-    const res  = await fetch('/api/attendance/import', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ key }),
-    });
-    const data = await res.json();
-    if (!data.ok) { alert(data.error || 'Could not pull from Artie.'); return; }
-    alert(data.imported
-      ? 'Brought across ' + data.imported + ' swim' + (data.imported === 1 ? '' : 's') + '.'
-      : 'Nothing new — everything in Artie is already here.');
-    await refreshTally();
-    renderTally();
-  } catch (err) {
-    alert('Could not reach the server — please try again.');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = was; }
   }
 }
 
