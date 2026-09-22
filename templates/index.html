@@ -1233,10 +1233,10 @@ function renderSharing() {
   if (btn) btn.textContent = on ? 'Turn off sharing' : 'Turn on sharing';
 
   // Pulling needs the athlete name that sharing sets, so it only appears once on
-  const imp  = document.getElementById('share-btn-import');
-  const note = document.getElementById('import-note');
-  if (imp)  imp.style.display  = on ? '' : 'none';
-  if (note) note.style.display = on ? '' : 'none';
+  const imp     = document.getElementById('share-btn-import');
+  const impNote = document.getElementById('import-note');
+  if (imp)     imp.style.display     = on ? '' : 'none';
+  if (impNote) impNote.style.display = on ? '' : 'none';
 
   // Never let the app claim privacy it isn't delivering.
   const sub = document.getElementById('tally-privacy-sub');
