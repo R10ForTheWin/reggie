@@ -504,11 +504,28 @@ def api_attendance_add():
         class_name=str(body.get("class_name", ""))[:200],
         class_date=str(body.get("class_date", ""))[:32],
         yards=body.get("yards"),
+        activity=str(body.get("activity", tally.POOL)),
     )
     if pid is None:
         return jsonify({"ok": False,
                         "error": "Could not add — is one already logged for that day?"}), 409
     return jsonify({"ok": True, "id": pid})
+
+
+@app.route("/api/attendance/import", methods=["POST"])
+def api_attendance_import():
+    """Pull this swimmer's own Artie swims into the tally.
+
+    Only reads rows Artie owns and only writes rows marked origin='artie', and
+    skips any day already logged for that activity — so running it twice, or
+    running it alongside sharing, cannot double-count a swim."""
+    body = request.json or {}
+    key  = str(body.get("key", "")).strip()
+    if not tally.enabled():
+        return jsonify({"ok": False, "error": "Tally is not configured"}), 400
+    if not tally.valid_key(key):
+        return jsonify({"ok": False, "error": "Invalid key"}), 400
+    return jsonify({"ok": True, "imported": tally.import_from_artie(key)})
 
 
 @app.route("/api/attendance/<int:practice_id>/delete", methods=["POST"])

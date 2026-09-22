@@ -175,8 +175,8 @@ def record_practice(email, class_id, class_name=None, class_date=None,
                 """
                 insert into reggie.practices
                     (user_key, class_id, student_id, class_name,
-                     class_date, class_date_raw, starts_at, ends_at, yards)
-                values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     class_date, class_date_raw, starts_at, ends_at, yards, activity)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pool_swim')
                 on conflict do nothing
                 returning id
                 """,
@@ -235,6 +235,19 @@ def set_yards(key, practice_id, yards):
 
 _YARDS_TO_METRES = 0.9144
 
+# Matches Artie's activity column. Reggie has only ever tracked pool practices,
+# so that stays the default for every existing row.
+POOL  = "pool_swim"
+OCEAN = "ocean_swim"
+ACTIVITIES = (POOL, OCEAN)
+_ARTIE_FILE_TYPE = {POOL: "Pool Swim", OCEAN: "Open Water Swim"}
+
+
+def clean_activity(raw):
+    """Anything unrecognised is a pool swim, which is what Reggie has always meant."""
+    value = (raw or "").strip().lower()
+    return value if value in ACTIVITIES else POOL
+
 
 def get_sharing(key):
     """{'enabled': bool, 'athlete_name': str} for this swimmer. Defaults to off."""
@@ -283,7 +296,7 @@ def set_sharing(key, is_enabled, athlete_name):
         return False
 
 
-def sync_to_artie(key, class_date, yards, class_name=None):
+def sync_to_artie(key, class_date, yards, class_name=None, activity=POOL):
     """Mirror one confirmed swim into Artie's workouts table.
 
     No-op unless this swimmer opted in. Never raises: a sharing failure must
@@ -300,7 +313,8 @@ def sync_to_artie(key, class_date, yards, class_name=None):
         return False
     metres    = round(amount * _YARDS_TO_METRES, 1)
     date_text = cdate.isoformat()
-    file_name = "reggie-pool-%s" % date_text
+    activity  = clean_activity(activity)
+    file_name = "reggie-%s-%s" % ("pool" if activity == POOL else "ocean", date_text)
 
     try:
         with _connect() as conn, conn.cursor() as cur:
@@ -310,16 +324,16 @@ def sync_to_artie(key, class_date, yards, class_name=None):
             cur.execute(
                 """
                 select 1 from public.workouts
-                 where activity = 'pool_swim'
+                 where activity = %s
                    and workout_date = %s
                    and name = %s
                    and coalesce(source, '') <> 'reggie'
                  limit 1
                 """,
-                (date_text, share["athlete_name"]),
+                (activity, date_text, share["athlete_name"]),
             )
             if cur.fetchone():
-                _log.info("Artie sync: manual pool_swim already logged for %s", date_text)
+                _log.info("Artie sync: %s already logged by hand for %s", activity, date_text)
                 return False
 
             cur.execute(
@@ -327,13 +341,14 @@ def sync_to_artie(key, class_date, yards, class_name=None):
                 insert into public.workouts
                     (name, file_name, file_type, workout_date,
                      distance_m, activity, source)
-                values (%s, %s, 'Pool Swim', %s, %s, 'pool_swim', 'reggie')
+                values (%s, %s, %s, %s, %s, %s, 'reggie')
                 on conflict (file_name) where source = 'reggie'
                 do update set distance_m = excluded.distance_m,
                               name       = excluded.name
                 returning id
                 """,
-                (share["athlete_name"], file_name, date_text, metres),
+                (share["athlete_name"], file_name,
+                 _ARTIE_FILE_TYPE[activity], date_text, metres, activity),
             )
             return cur.fetchone() is not None
     except Exception as e:
@@ -349,12 +364,77 @@ def sync_all_to_artie(key):
         return 0
     return sum(
         1 for e in data["entries"]
-        if e["confirmed"] and e["date"]
-        and sync_to_artie(key, e["date"], e["yards"], e["name"])
+        if e["confirmed"] and e["date"] and e.get("origin", "reggie") == "reggie"
+        and sync_to_artie(key, e["date"], e["yards"], e["name"], e.get("activity", POOL))
     )
 
 
-def add_practice(key, class_name=None, class_date=None, yards=None):
+def import_from_artie(key):
+    """Pull the swimmer's own Artie swims into the tally.
+
+    The other half of sync_to_artie. Redundancy is avoided from both ends: we
+    only ever read rows Artie owns (source is not 'reggie') and only ever write
+    rows marked origin='artie', which sync_all_to_artie skips. A day that
+    already has an entry for that activity is left alone, so whichever side
+    logged it first keeps it and nothing is counted twice.
+    """
+    if not enabled() or not valid_key(key):
+        return 0
+    share = get_sharing(key)
+    if not share["enabled"] or not share["athlete_name"]:
+        return 0
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                select workout_date, activity, distance_m
+                  from public.workouts
+                 where name = %s
+                   and activity in ('pool_swim', 'ocean_swim')
+                   and distance_m is not null
+                   and coalesce(source, '') <> 'reggie'
+                """,
+                (share["athlete_name"],),
+            )
+            rows = cur.fetchall()
+
+            added = 0
+            for workout_date, activity, distance_m in rows:
+                activity = clean_activity(activity)
+                cdate = _parse_date(workout_date)
+                if not cdate:
+                    continue
+                yards = clamp_yards(round(float(distance_m) / _YARDS_TO_METRES))
+                if yards is None:
+                    continue
+                starts_at, ends_at = _practice_window(cdate, None, None, None)
+                cur.execute(
+                    """
+                    insert into reggie.practices
+                        (user_key, class_id, class_name, class_date,
+                         starts_at, ends_at, yards, yards_confirmed, activity, origin)
+                    select %s, 'artie', %s, %s, %s, %s, %s, true, %s, 'artie'
+                     where not exists (
+                        select 1 from reggie.practices
+                         where user_key = %s and class_date = %s
+                           and activity = %s and deleted_at is null
+                     )
+                    returning id
+                    """,
+                    (key,
+                     "Ocean swim" if activity == OCEAN else "Pool swim",
+                     cdate, starts_at, ends_at, yards, activity,
+                     key, cdate, activity),
+                )
+                if cur.fetchone():
+                    added += 1
+            return added
+    except Exception as e:
+        _log.warning("Import from Artie failed (tally unaffected): %s", e)
+        return 0
+
+
+def add_practice(key, class_name=None, class_date=None, yards=None, activity=POOL):
     """Manually log a practice Reggie didn't register — or one deleted by
     mistake and no longer undoable. Returns the new row id, or None."""
     if not enabled() or not valid_key(key):
@@ -363,7 +443,8 @@ def add_practice(key, class_name=None, class_date=None, yards=None):
     amount = clamp_yards(yards)
     if amount is None:
         amount = DEFAULT_YARDS
-    name = (class_name or "").strip()[:200] or "Practice"
+    activity = clean_activity(activity)
+    name = (class_name or "").strip()[:200] or ("Ocean swim" if activity == OCEAN else "Practice")
     starts_at, ends_at = _practice_window(cdate, None, None, name)
     try:
         with _connect() as conn, conn.cursor() as cur:
@@ -374,12 +455,12 @@ def add_practice(key, class_name=None, class_date=None, yards=None):
                 """
                 insert into reggie.practices
                     (user_key, class_id, class_name, class_date,
-                     starts_at, ends_at, yards, yards_confirmed)
-                values (%s, 'manual', %s, %s, %s, %s, %s, true)
+                     starts_at, ends_at, yards, yards_confirmed, activity, origin)
+                values (%s, 'manual', %s, %s, %s, %s, %s, true, %s, 'reggie')
                 on conflict do nothing
                 returning id
                 """,
-                (key, name, cdate, starts_at, ends_at, amount),
+                (key, name, cdate, starts_at, ends_at, amount, activity),
             )
             row = cur.fetchone()
             if not row:
@@ -391,7 +472,7 @@ def add_practice(key, class_name=None, class_date=None, yards=None):
 
     # A manual entry is confirmed by definition, so it syncs like any other.
     try:
-        sync_to_artie(key, cdate, amount, name)
+        sync_to_artie(key, cdate, amount, name, activity)
     except Exception as e:
         _log.warning("Artie sync failed after manual add: %s", e)
     return pid
@@ -456,7 +537,7 @@ def list_practices(key, limit=2000):
             cur.execute(
                 """
                 select id, class_name, class_date, starts_at, ends_at,
-                       yards, yards_confirmed
+                       yards, yards_confirmed, activity, origin
                   from reggie.practices
                  where user_key = %s and deleted_at is null
                  order by class_date desc, id desc
@@ -478,14 +559,16 @@ def list_practices(key, limit=2000):
     total_yards  = 0
     year_yards   = 0
     pending      = []
+    by_activity  = {POOL: 0, OCEAN: 0}
 
-    for pid, name, cdate, starts_at, ends_at, yards, confirmed in rows:
+    for pid, name, cdate, starts_at, ends_at, yards, confirmed, activity, origin in rows:
         yards = yards or 0
         in_year = bool(cdate and cdate >= year_ago)
         if in_year:
             last_year  += 1
             year_yards += yards
         total_yards += yards
+        by_activity[clean_activity(activity)] = by_activity.get(clean_activity(activity), 0) + yards
 
         # Ask 10 minutes before the end, while the swimmer is still at the pool.
         # When the class time was never captured, fall back to the day being
@@ -504,6 +587,8 @@ def list_practices(key, limit=2000):
             "yards":     yards,
             "confirmed": bool(confirmed),
             "is_over":   is_over,
+            "activity":  clean_activity(activity),
+            "origin":    origin or "reggie",
         }
         entries.append(entry)
         if is_over and not confirmed:
@@ -513,6 +598,8 @@ def list_practices(key, limit=2000):
         "total":        len(entries),
         "last_year":    last_year,
         "total_yards":  total_yards,
+        "pool_yards":   by_activity.get(POOL, 0),
+        "ocean_yards":  by_activity.get(OCEAN, 0),
         "year_yards":   year_yards,
         "default_yards": DEFAULT_YARDS,
         "entries":      entries,
