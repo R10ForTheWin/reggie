@@ -127,6 +127,9 @@
     }
     .yard-step:active { background: var(--blue); color: #fff; }
     #yards-slider { accent-color: var(--blue); height: 28px; }
+    /* Setting yardage is a single decision — hide the rest of the home screen
+       so the webcam and pool list are not competing for the same tap. */
+    #screen-home.focus-yards .content > *:not(#yards-prompt) { display: none !important; }
 
     /* Period filter — five segments have to survive a narrow phone. */
     .period-tabs {
@@ -392,8 +395,9 @@
 
       <div style="display:flex;gap:10px">
         <button class="btn btn-primary" style="flex:1;margin:0" onclick="saveYards()">Save</button>
-        <button class="btn btn-outline" style="flex:0 0 40%;margin:0" onclick="skipYardsPrompt()">Didn't swim</button>
+        <button class="btn btn-outline" id="yards-skip" style="flex:0 0 40%;margin:0" onclick="skipYardsPrompt()">Didn't swim</button>
       </div>
+      <button id="yards-delete" onclick="skipYardsPrompt()" style="display:none;width:100%;margin-top:12px;background:none;border:none;color:var(--muted);font-size:13px;text-decoration:underline;cursor:pointer;padding:6px">Delete this swim</button>
     </div>
 
     <div class="card" id="tally-card" style="display:none;padding:16px 16px 12px;margin-bottom:16px;cursor:pointer" onclick="openTally()">
@@ -583,6 +587,12 @@ function show(name) {
   if (typeof hideUndo === 'function') hideUndo();
   const corner = document.getElementById('dry-run-corner');
   if (corner) corner.style.display = (name === 'confirm') ? 'flex' : 'none';
+
+  // Belt and braces: focus mode blanks the home screen, so never leave it on
+  // when the card that justifies it is not actually showing.
+  const home   = document.getElementById('screen-home');
+  const prompt = document.getElementById('yards-prompt');
+  if (home && prompt && prompt.style.display === 'none') home.classList.remove('focus-yards');
 }
 
 // ── Profile helpers ───────────────────────────────────────────────────────
@@ -988,6 +998,9 @@ let promptEntry = null;
 function hideYardsPrompt() {
   promptEntry = null;
   document.getElementById('yards-prompt').style.display = 'none';
+  // Always lift focus mode with the card, or the home screen stays empty
+  const home = document.getElementById('screen-home');
+  if (home) home.classList.remove('focus-yards');
 }
 
 function showNextYardsPrompt() {
@@ -1011,8 +1024,25 @@ function showNextYardsPrompt() {
     backlog.style.display = 'none';
   }
 
+  setYardsMode('pending');
   setYardsDisplay(promptEntry.yards || (tallyData.default_yards || 3000));
+  openYardsPrompt();
+}
+
+// "Didn't swim" is the right words when Reggie is asking about a practice that
+// just finished; "Delete this swim" is the right words when you opened an old
+// one yourself. Same action, so there is only ever one delete on screen.
+function setYardsMode(mode) {
+  const skip = document.getElementById('yards-skip');
+  const del  = document.getElementById('yards-delete');
+  if (skip) skip.style.display = mode === 'pending' ? '' : 'none';
+  if (del)  del.style.display  = mode === 'edit'    ? '' : 'none';
+}
+
+function openYardsPrompt() {
   document.getElementById('yards-prompt').style.display = 'block';
+  const home = document.getElementById('screen-home');
+  if (home) home.classList.add('focus-yards');
 }
 
 function setYardsDisplay(value) {
@@ -1055,11 +1085,12 @@ function editYards(id) {
   const entry = (tallyData && tallyData.entries || []).find(e => e.id === id);
   if (!entry) return;
   promptEntry = entry;
+  setYardsMode('edit');
   document.getElementById('yards-prompt-name').textContent = entry.name;
   document.getElementById('yards-prompt-when').textContent =
     [entry.label, entry.time].filter(Boolean).join(' · ');
   setYardsDisplay(entry.yards);
-  document.getElementById('yards-prompt').style.display = 'block';
+  openYardsPrompt();
   show('home');
 }
 
@@ -1137,21 +1168,21 @@ function renderTally() {
                    + '</p>';
     return;
   }
+  // The whole row opens the editor. Deleting lives inside that window, where it
+  // takes a deliberate tap — the old × sat under the thumb and was too easy to hit.
   list.innerHTML = shown.map(e => `
-    <div class="class-item" style="display:flex;align-items:center;gap:12px">
+    <div class="class-item" onclick="editYards(${e.id})" role="button" tabindex="0"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();editYards(${e.id})}"
+         style="display:flex;align-items:center;gap:12px;cursor:pointer">
       <div style="flex:1;min-width:0">
         <div class="class-name">${e.activity === 'ocean_swim' ? '🌊 ' : ''}${esc(e.name)}</div>
         <div class="class-meta">${esc([e.label, e.time].filter(Boolean).join(' · '))}</div>
       </div>
-      <button onclick="event.stopPropagation();editYards(${e.id})"
-              title="Change yardage"
-              style="background:none;border:none;cursor:pointer;padding:4px 6px;text-align:right">
+      <div style="text-align:right;padding:4px 6px">
         <span style="font-size:15px;font-weight:700;color:${e.confirmed ? 'var(--blue)' : 'var(--muted)'}">${nf(e.yards)}</span>
         <span style="font-size:11px;color:var(--muted)">yd${e.confirmed ? '' : '*'}</span>
-      </button>
-      <button onclick="event.stopPropagation();removePractice(${e.id})"
-              title="I skipped this one"
-              style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px 8px;line-height:1">×</button>
+      </div>
+      <span aria-hidden="true" style="color:var(--muted);font-size:18px;line-height:1">›</span>
     </div>`).join('');
   const anyEstimated = shown.some(e => !e.confirmed);
   if (anyEstimated) {
