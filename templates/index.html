@@ -524,7 +524,10 @@
     </div>
     <p class="note" style="margin:0 0 12px">Tap a yardage to change it · × removes a practice you skipped</p>
     <div id="tally-list"></div>
-    <button class="btn btn-outline" onclick="addPracticeManually()" style="margin-top:12px">+ Add a practice</button>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-outline" style="flex:1" onclick="addPracticeManually('pool_swim')">+ Pool practice</button>
+      <button class="btn btn-outline" style="flex:1" onclick="addPracticeManually('ocean_swim')">+ Ocean swim</button>
+    </div>
 
     <div class="card" style="margin-top:20px;padding:16px">
       <div style="font-size:14px;font-weight:700;margin-bottom:4px">Share swims with the Artie crew</div>
@@ -532,6 +535,8 @@
         Off. Your practices stay private to you.
       </p>
       <button class="btn btn-outline" id="share-btn-toggle" onclick="toggleSharing()" style="font-size:15px;padding:12px">Turn on sharing</button>
+      <button class="btn btn-outline" id="share-btn-import" onclick="importFromArtie()" style="font-size:15px;padding:12px;margin-top:8px;display:none">Pull my swims from Artie</button>
+      <p class="note" style="margin:8px 0 0" id="import-note">Brings across swims logged in Artie. A day already here is left alone.</p>
     </div>
 
     <button class="btn btn-outline" onclick="show('home')" style="margin-top:12px">Back</button>
@@ -1136,7 +1141,7 @@ function renderTally() {
   list.innerHTML = shown.map(e => `
     <div class="class-item" style="display:flex;align-items:center;gap:12px">
       <div style="flex:1;min-width:0">
-        <div class="class-name">${esc(e.name)}</div>
+        <div class="class-name">${e.activity === 'ocean_swim' ? '🌊 ' : ''}${esc(e.name)}</div>
         <div class="class-meta">${esc([e.label, e.time].filter(Boolean).join(' · '))}</div>
       </div>
       <button onclick="event.stopPropagation();editYards(${e.id})"
@@ -1227,6 +1232,12 @@ function renderSharing() {
   }
   if (btn) btn.textContent = on ? 'Turn off sharing' : 'Turn on sharing';
 
+  // Pulling needs the athlete name that sharing sets, so it only appears once on
+  const imp  = document.getElementById('share-btn-import');
+  const note = document.getElementById('import-note');
+  if (imp)  imp.style.display  = on ? '' : 'none';
+  if (note) note.style.display = on ? '' : 'none';
+
   // Never let the app claim privacy it isn't delivering.
   const sub = document.getElementById('tally-privacy-sub');
   if (sub) {
@@ -1239,6 +1250,32 @@ function renderSharing() {
     note.textContent = on
       ? '🏄 Shared with the Artie crew · tap for history'
       : '🔒 Only you can see this · tap for history';
+  }
+}
+
+async function importFromArtie() {
+  const key = getTallyKey();
+  if (!key) return;
+  const btn = document.getElementById('share-btn-import');
+  const was = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Pulling…'; }
+  try {
+    const res  = await fetch('/api/attendance/import', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ key }),
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Could not pull from Artie.'); return; }
+    alert(data.imported
+      ? 'Brought across ' + data.imported + ' swim' + (data.imported === 1 ? '' : 's') + '.'
+      : 'Nothing new — everything in Artie is already here.');
+    await refreshTally();
+    renderTally();
+  } catch (err) {
+    alert('Could not reach the server — please try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = was; }
   }
 }
 
@@ -1280,36 +1317,38 @@ async function toggleSharing() {
 
 // ── Manual add ────────────────────────────────────────────────────────────
 // For a swim Reggie didn't register, or one deleted after undo expired.
-async function addPracticeManually() {
+async function addPracticeManually(activity) {
   const key = getTallyKey();
   if (!key) return;
+  activity = activity === 'ocean_swim' ? 'ocean_swim' : 'pool_swim';
+  const isOcean = activity === 'ocean_swim';
   const today = new Date();
   const iso = today.getFullYear() + '-'
             + String(today.getMonth() + 1).padStart(2, '0') + '-'
             + String(today.getDate()).padStart(2, '0');
 
-  const date = prompt('Date of the practice (YYYY-MM-DD):', iso);
+  const date = prompt('Date of the ' + (isOcean ? 'ocean swim' : 'practice') + ' (YYYY-MM-DD):', iso);
   if (date === null) return;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
     alert('Please use the format YYYY-MM-DD, e.g. ' + iso);
     return;
   }
-  const yardsIn = prompt('Yards swum:', '3000');
+  const yardsIn = prompt('Yards swum:', isOcean ? '2000' : '3000');
   if (yardsIn === null) return;
   const yards = Number(yardsIn);
   if (!isFinite(yards) || yards < 0) { alert('Please enter a number of yards.'); return; }
 
-  const name = prompt('Name it (optional):', 'Practice');
+  const name = prompt('Name it (optional):', isOcean ? 'Ocean swim' : 'Practice');
   if (name === null) return;
 
   try {
     const res = await fetch('/api/attendance/add', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ key, class_date: date.trim(), yards, class_name: name }),
+      body:    JSON.stringify({ key, class_date: date.trim(), yards, class_name: name, activity }),
     });
     const data = await res.json();
-    if (!data.ok) { alert(data.error || 'Could not add that practice.'); return; }
+    if (!data.ok) { alert(data.error || 'Could not add that swim.'); return; }
   } catch (err) {
     alert('Could not reach the server — please try again.');
     return;
