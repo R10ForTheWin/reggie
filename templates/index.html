@@ -116,6 +116,25 @@
     }
     .btn:active { transform: scale(0.97); opacity: 0.9; }
     .btn + .btn  { margin-top: 12px; }
+
+    /* Adding a swim is occasional, so these sit quietly under the list
+       rather than as two more full-weight outlined buttons. */
+    .add-row { display: flex; gap: 10px; margin: 14px 0 8px; }
+    .add-row .btn {
+      flex: 1; margin: 0;
+      padding: 12px 8px; font-size: 15px;
+      background: var(--card); color: var(--blue);
+      border: 1.5px dashed var(--blue-mid);
+    }
+
+    /* Standalone iOS draws the clock over the page (black-translucent), so a
+       scrolled list shows through behind it. Keep that strip solid. */
+    body::before {
+      content: ''; position: fixed; top: 0; left: 0; right: 0; z-index: 40;
+      height: env(safe-area-inset-top, 0px);
+      background: var(--blue-dark);
+      pointer-events: none;
+    }
     .btn-primary  { background: var(--blue);    color: white; }
     .btn-success  { background: var(--success); color: white; }
     .btn-outline  { background: transparent; color: var(--blue); border: 2px solid var(--blue); }
@@ -600,15 +619,12 @@
         <div style="font-size:13px;color:var(--muted);margin-top:4px">yards · <span id="tally-avg">—</span> avg</div>
       </div>
     </div>
-    <p class="note" style="margin:0 0 12px">Tap a yardage to change it · × removes a practice you skipped</p>
+    <p class="note" style="margin:0 0 12px">Tap a swim to change its yardage or remove it</p>
     <div id="tally-list"></div>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn btn-outline" style="flex:1" onclick="addPracticeManually('pool_swim')">+ Pool practice</button>
-      <button class="btn btn-outline" style="flex:1" onclick="addPracticeManually('ocean_swim')">+ Ocean swim</button>
+    <div class="add-row">
+      <button class="btn" onclick="addPracticeManually('pool_swim')">+ Pool practice</button>
+      <button class="btn" onclick="addPracticeManually('ocean_swim')">+ Ocean swim</button>
     </div>
-
-
-    <button class="btn btn-outline" onclick="show('home')" style="margin-top:12px">Back</button>
   </div>
 </div>
 
