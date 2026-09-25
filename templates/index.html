@@ -407,6 +407,14 @@
         <input type="text" id="s-promo" placeholder="e.g. SWIM2024" autocomplete="off" autocapitalize="characters" spellcheck="false">
       </div>
     </div>
+    <div class="card" id="share-card" style="display:none;padding:16px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:4px">Share swims with the Artie crew</div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px" id="share-explain">
+        Off. Your practices stay private to you.
+      </p>
+      <button class="btn btn-outline" id="share-btn-toggle" onclick="toggleSharing()" style="font-size:15px;padding:12px">Turn on sharing</button>
+      <p class="note" style="margin:8px 0 0" id="import-note" style="display:none">Swims logged in Artie show up in your tally automatically.</p>
+    </div>
     <div id="setup-err" class="error-inline" style="display:none"></div>
     <div class="section-gap">
       <button class="btn btn-primary" onclick="saveSetup()">Save &amp; Continue</button>
@@ -475,7 +483,6 @@
       <div class="odo-sub">
         <strong id="tally-miles">—</strong> miles · <span id="tally-total">—</span> swims · since <span id="tally-year">—</span>
       </div>
-      <p class="note" style="margin:6px 0 0" id="tally-card-note">🔒 Only you can see this · tap for history</p>
     </div>
 
     <div class="section-title">Manhattan Beach · Live</div>
@@ -589,14 +596,6 @@
       <button class="btn btn-outline" style="flex:1" onclick="addPracticeManually('ocean_swim')">+ Ocean swim</button>
     </div>
 
-    <div class="card" style="margin-top:20px;padding:16px">
-      <div style="font-size:14px;font-weight:700;margin-bottom:4px">Share swims with the Artie crew</div>
-      <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px" id="share-explain">
-        Off. Your practices stay private to you.
-      </p>
-      <button class="btn btn-outline" id="share-btn-toggle" onclick="toggleSharing()" style="font-size:15px;padding:12px">Turn on sharing</button>
-      <p class="note" style="margin:8px 0 0" id="import-note" style="display:none">Swims logged in Artie appear here automatically.</p>
-    </div>
 
     <button class="btn btn-outline" onclick="show('home')" style="margin-top:12px">Back</button>
   </div>
@@ -706,6 +705,9 @@ function openSetup() {
     ? 'Your SCAQ login and promo code'
     : "I am Reggie, and I'm here to help you register for practice";
   document.getElementById('setup-back').style.display = editing ? '' : 'none';
+  // Sharing only means something once there is a swim log to share.
+  document.getElementById('share-card').style.display = editing && tallyData ? '' : 'none';
+  renderSharing();
   show('setup');
 }
 
@@ -1420,12 +1422,6 @@ function renderSharing() {
     sub.textContent = on
       ? 'Shared with the Artie crew'
       : 'Private to you — never shared with the team';
-  }
-  const note = document.getElementById('tally-card-note');
-  if (note) {
-    note.textContent = on
-      ? '🏄 Shared with the Artie crew · tap for history'
-      : '🔒 Only you can see this · tap for history';
   }
 }
 
