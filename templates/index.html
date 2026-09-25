@@ -562,7 +562,10 @@
 
 <!-- ══════════════════════════════════════════ CLASS LIST -->
 <div class="screen" id="screen-classes">
-  <div class="header header-sm">
+  <div class="header header-sm has-back">
+    <button class="gear-btn back-btn" onclick="show('home')" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
     <h1>Available Classes</h1>
     <p>Tap a class to select it</p>
   </div>
@@ -571,7 +574,6 @@
       <input type="text" id="search" placeholder="Search classes..." oninput="filterClasses()" autocomplete="off">
     </div>
     <div id="class-list"></div>
-    <button class="btn btn-outline" onclick="show('home')" style="margin-top:8px">Back</button>
   </div>
 </div>
 
