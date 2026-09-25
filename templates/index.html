@@ -99,6 +99,18 @@
     }
     input:focus { outline: none; border-color: var(--blue); }
 
+    /* Show/hide sits inside the password field, on the right. */
+    .pw-wrap { position: relative; }
+    .pw-wrap input { padding-right: 76px; }
+    .pw-toggle {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      min-width: 60px; height: 40px; padding: 0 10px;
+      background: none; border: none; border-radius: 10px;
+      color: var(--blue); font-size: 14px; font-weight: 600; font-family: inherit;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .pw-toggle:active { background: #eef4fa; }
+
     /* ── Buttons ── */
     .btn {
       display: block;
@@ -427,7 +439,10 @@
       </div>
       <div class="form-group">
         <label>SCAQ Password</label>
-        <input type="password" id="s-password" placeholder="Your password" autocomplete="current-password">
+        <div class="pw-wrap">
+          <input type="password" id="s-password" placeholder="Your password" autocomplete="current-password">
+          <button type="button" class="pw-toggle" id="pw-toggle" onclick="togglePassword()" aria-label="Show password">Show</button>
+        </div>
       </div>
       <div class="form-group" id="promo-group" style="margin-bottom:0">
         <label>Promo Code <span class="label-note">(comes from SCAQ)</span></label>
@@ -721,6 +736,7 @@ function openSetup() {
   const p = getProfile();
   document.getElementById('s-email').value    = p.email;
   document.getElementById('s-password').value = p.password;
+  togglePassword(false);
   document.getElementById('s-promo').value    = p.promo;
   document.getElementById('setup-err').style.display = 'none';
   setMembership(p.membership || 'monthly');
@@ -736,6 +752,16 @@ function openSetup() {
   document.getElementById('share-card').style.display = editing && tallyData ? '' : 'none';
   renderSharing();
   show('setup');
+}
+
+// Starts hidden every time the page opens, so it's never left on show.
+function togglePassword(show) {
+  const input = document.getElementById('s-password');
+  const btn   = document.getElementById('pw-toggle');
+  if (show === undefined) show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.textContent = show ? 'Hide' : 'Show';
+  btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
 }
 
 function saveSetup() {
