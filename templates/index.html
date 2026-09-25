@@ -10,6 +10,9 @@
   <link rel="manifest" href="/static/manifest.json">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon-v2.png">
   <title>Reggie</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -221,30 +224,92 @@
       background: #EBF5FF;
     }
 
-    /* ── Profile badge ── */
-    .profile-badge {
+    /* ── Home bar ── */
+    /* Booking is the job, so the home header is a slim bar rather than a
+       splash — the button sits where the thumb lands. */
+    .home-bar {
       display: flex;
       align-items: center;
-      gap: 14px;
-      padding: 16px 18px;
-      background: var(--card);
-      border-radius: var(--radius);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-      margin-bottom: 24px;
+      gap: 12px;
+      background: linear-gradient(160deg, var(--blue-dark) 0%, var(--blue) 100%);
+      color: #fff;
+      padding: max(14px, env(safe-area-inset-top, 14px)) 16px 14px;
     }
-    .avatar {
-      width: 46px; height: 46px;
-      border-radius: 50%;
-      background: var(--blue);
-      color: white;
+    .home-bar img {
+      width: 40px; height: 40px; flex: 0 0 40px;
+      object-fit: cover; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.35);
+    }
+    .home-bar h1 { flex: 1; font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+
+    /* ── Account gear ── */
+    /* Login and promo are set once and rarely touched, so they live behind a
+       corner button instead of taking a card on the home screen. */
+    .gear-btn {
+      width: 44px; height: 44px; flex: 0 0 44px;
       display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 20px;
-      flex-shrink: 0;
+      background: rgba(255,255,255,0.14);
+      border: none; border-radius: 50%;
+      color: #fff; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
     }
-    .profile-info   { flex: 1; min-width: 0; }
-    .profile-email  { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .profile-promo  { font-size: 13px; color: var(--muted); margin-top: 2px; }
-    .edit-link      { color: var(--blue); font-size: 14px; font-weight: 600; background: none; border: none; cursor: pointer; padding: 4px; flex-shrink: 0; }
+    .gear-btn:active { background: rgba(255,255,255,0.28); }
+    .gear-btn svg { width: 22px; height: 22px; }
+
+    .next-line {
+      text-align: center; font-size: 14px; color: var(--muted);
+      margin-top: 12px;
+    }
+    .next-line strong { color: var(--text); font-weight: 600; }
+
+    /* ── Yardage odometer ── */
+    /* Yardage is the feature worth showing off, but it must not outweigh the
+       booking button: outlined tiles on the page background, no filled card. */
+    .odo-wrap {
+      margin: 32px 0 8px;
+      text-align: center;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .odo-row { display: flex; align-items: flex-end; justify-content: center; gap: 10px; }
+    .odo {
+      display: flex; align-items: flex-end; gap: 4px;
+      font-family: 'Roboto Mono', ui-monospace, Menlo, monospace;
+      font-size: 34px; font-weight: 500; color: var(--blue-dark);
+    }
+    .odo-digit {
+      position: relative;
+      width: 0.78em; height: 1.3em;
+      overflow: hidden;
+      border: 1.5px solid #C9DDF0;
+      border-radius: 8px;
+      background: #fff;
+      /* a hint of drum curvature */
+      box-shadow: inset 0 6px 6px -6px rgba(3,4,94,0.18), inset 0 -6px 6px -6px rgba(3,4,94,0.18);
+    }
+    .odo-strip {
+      position: absolute; left: 0; right: 0; top: 0;
+      display: flex; flex-direction: column;
+      transition: transform 1.4s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .odo-strip span { height: 1.3em; line-height: 1.3em; text-align: center; }
+    .odo-sep { font-size: 0.8em; line-height: 1.3em; color: var(--muted); margin: 0 -1px; }
+    .odo-unit {
+      font-size: 13px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.6px;
+      padding-bottom: 8px;
+    }
+    .odo-sub { font-size: 15px; color: var(--muted); margin-top: 12px; }
+    .odo-sub strong { color: var(--blue); font-weight: 700; }
+    @media (prefers-reduced-motion: reduce) { .odo-strip { transition: none; } }
+
+    /* ── Webcam ── */
+    .section-title {
+      font-size: 12px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      margin: 32px 0 8px;
+    }
+    .cam-frame { width: 100%; aspect-ratio: 16 / 9; border: 0; display: block; background: #000; }
 
     /* ── Class list ── */
     .search-wrap { margin-bottom: 14px; }
@@ -311,8 +376,8 @@
 <div class="screen" id="screen-setup">
   <div class="header">
     <img src="/static/reggie.png" alt="Reggie" style="width:160px;height:160px;object-fit:cover;border-radius:50%;margin-bottom:14px;border:3px solid rgba(255,255,255,0.3);">
-    <h1>Hello There!</h1>
-    <p>I am Reggie, and I'm here to help you register for practice</p>
+    <h1 id="setup-title">Hello There!</h1>
+    <p id="setup-sub">I am Reggie, and I'm here to help you register for practice</p>
   </div>
   <div class="content">
     <div class="card">
@@ -345,26 +410,24 @@
     <div id="setup-err" class="error-inline" style="display:none"></div>
     <div class="section-gap">
       <button class="btn btn-primary" onclick="saveSetup()">Save &amp; Continue</button>
+      <button class="btn btn-outline" id="setup-back" style="display:none" onclick="show('home')">Back</button>
     </div>
   </div>
 </div>
 
 <!-- ══════════════════════════════════════════ HOME -->
 <div class="screen" id="screen-home">
-  <div class="header">
-    <img src="/static/reggie.png" alt="Reggie" style="width:120px;height:120px;object-fit:cover;border-radius:50%;margin-bottom:14px;border:3px solid rgba(255,255,255,0.3);">
+  <div class="home-bar">
+    <img src="/static/reggie.png" alt="">
     <h1>Reggie</h1>
-    <p>Swim Registration Helper</p>
+    <button class="gear-btn" onclick="openSetup()" aria-label="Account settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
   </div>
   <div class="content">
-    <div class="profile-badge">
-      <div class="avatar" id="home-avatar">?</div>
-      <div class="profile-info">
-        <div class="profile-email" id="home-email">—</div>
-        <div class="profile-promo" id="home-promo"></div>
-      </div>
-      <button class="edit-link" onclick="openSetup()">Edit</button>
-    </div>
     <div id="install-banner" style="display:none;background:#EBF5FF;border:1.5px solid var(--blue);border-radius:14px;padding:14px 16px;margin-bottom:16px;position:relative;">
       <button onclick="dismissInstall()" style="position:absolute;top:10px;right:12px;background:none;border:none;font-size:18px;color:var(--muted);cursor:pointer;padding:0;line-height:1;">×</button>
       <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:6px;">📲 Add to Home Screen</div>
@@ -400,31 +463,25 @@
       <button id="yards-delete" onclick="skipYardsPrompt()" style="display:none;width:100%;margin-top:12px;background:none;border:none;color:var(--muted);font-size:13px;text-decoration:underline;cursor:pointer;padding:6px">Delete this swim</button>
     </div>
 
-    <div class="card" id="tally-card" style="display:none;padding:16px 16px 12px;margin-bottom:16px;cursor:pointer" onclick="openTally()">
-      <div style="display:flex;justify-content:space-around;align-items:flex-start">
-        <div style="text-align:center;flex:1">
-          <div style="font-size:26px;font-weight:800;color:var(--blue);line-height:1.1" id="tally-total">—</div>
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:4px">Practices</div>
-        </div>
-        <div style="width:1px;align-self:stretch;background:#eee"></div>
-        <div style="text-align:center;flex:1">
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Since</div>
-          <div style="font-size:26px;font-weight:800;color:var(--text);line-height:1.1" id="tally-year">—</div>
-        </div>
+    <button class="btn btn-primary btn-lg" onclick="startFindClasses()">Book a Practice</button>
+    <p class="next-line" id="next-practice" style="display:none"></p>
+
+    <div class="odo-wrap" id="tally-card" style="display:none" onclick="openTally()" role="button" tabindex="0"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTally()}">
+      <div class="odo-row" id="odo-row" role="img" aria-label="Yards logged">
+        <div class="odo" id="odo" aria-hidden="true"></div>
+        <span class="odo-unit" aria-hidden="true">yards</span>
       </div>
-      <div style="border-top:1px solid #eee;margin-top:12px;padding-top:10px;text-align:center">
-        <span style="font-size:15px;font-weight:700;color:var(--blue-mid)" id="tally-yards">—</span>
-        <span style="font-size:12px;color:var(--muted)" id="tally-yards-label"> yards logged</span>
+      <div class="odo-sub">
+        <strong id="tally-miles">—</strong> miles · <span id="tally-total">—</span> swims · since <span id="tally-year">—</span>
       </div>
-      <p class="note" style="margin:8px 0 0" id="tally-card-note">🔒 Only you can see this · tap for history</p>
+      <p class="note" style="margin:6px 0 0" id="tally-card-note">🔒 Only you can see this · tap for history</p>
     </div>
-    <button class="btn btn-primary btn-lg" onclick="startFindClasses()">Select a Pool</button>
-    <p class="note" style="margin-top:20px">Tap to browse open practices and register instantly</p>
-    <p style="margin-top:24px;margin-bottom:8px;font-size:15px;font-weight:700;color:var(--text)">Open Water Option:</p>
+
+    <div class="section-title">Manhattan Beach · Live</div>
     <div class="card" style="padding:0;overflow:hidden">
-      <iframe src="https://www.youtube.com/embed/tBEIYdw1HeM?autoplay=1&mute=1&playsinline=1&rel=0" style="width:100%;height:180px;border:0;display:block" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen title="Manhattan Beach Cam and Surf Report — live"></iframe>
-      <p class="note" style="margin:10px 0 0;padding:0 12px">🌊 Manhattan Beach Pier — Live</p>
-      <div id="surf-stats" style="display:flex;justify-content:space-around;padding:12px 10px 14px;border-top:1px solid #eee;margin-top:10px">
+      <iframe class="cam-frame" src="https://www.youtube.com/embed/tBEIYdw1HeM?autoplay=1&mute=1&playsinline=1&rel=0" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen title="Manhattan Beach Cam and Surf Report — live"></iframe>
+      <div id="surf-stats" style="display:flex;justify-content:space-around;padding:12px 10px 14px">
         <div style="text-align:center">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Temp</div>
           <div id="surf-temp" style="font-size:17px;font-weight:700;margin-top:2px">—</div>
@@ -641,6 +698,14 @@ function openSetup() {
   document.getElementById('s-promo').value    = p.promo;
   document.getElementById('setup-err').style.display = 'none';
   setMembership(p.membership || 'monthly');
+  // Opened from the gear: it's an account page, not a first-run welcome, and
+  // needs a way out without re-saving.
+  const editing = !!(p.email && p.password);
+  document.getElementById('setup-title').textContent = editing ? 'Account' : 'Hello There!';
+  document.getElementById('setup-sub').textContent   = editing
+    ? 'Your SCAQ login and promo code'
+    : "I am Reggie, and I'm here to help you register for practice";
+  document.getElementById('setup-back').style.display = editing ? '' : 'none';
   show('setup');
 }
 
@@ -672,16 +737,6 @@ function loadHome() {
   const dismissed = localStorage.getItem('reggie_install_dismissed');
   document.getElementById('install-banner').style.display = (!isStandalone && !dismissed) ? 'block' : 'none';
 
-  const p = getProfile();
-  document.getElementById('home-avatar').textContent = p.email ? p.email[0].toUpperCase() : '?';
-  document.getElementById('home-email').textContent  = p.email || 'Not configured';
-  if (p.membership === 'daily') {
-    document.getElementById('home-promo').textContent = 'Daily Drop-in';
-  } else {
-    document.getElementById('home-promo').textContent = p.promo
-      ? 'Monthly · Promo: ' + p.promo
-      : 'Monthly Member';
-  }
   loadSurf();
 }
 
@@ -979,7 +1034,10 @@ async function refreshTally() {
     }
     tallyData = data;
     document.getElementById('tally-total').textContent = data.total;
-    document.getElementById('tally-yards').textContent = nf(data.total_yards);
+    document.getElementById('tally-miles').textContent = (data.total_yards / 1760).toFixed(1);
+    document.getElementById('odo-row').setAttribute('aria-label', nf(data.total_yards) + ' yards logged');
+    setOdometer(data.total_yards);
+    renderNextPractice(data.entries);
 
     document.getElementById('tally-year').textContent = firstSwimDate(data.entries) || '—';
     card.style.display = 'block';
@@ -988,6 +1046,80 @@ async function refreshTally() {
   } catch (err) {
     card.style.display = 'none';
   }
+}
+
+// ── Yardage odometer ──────────────────────────────────────────────────────
+// Each digit is a 0–9 strip slid into place, so a new total rolls up like a
+// car's odometer. It starts from the last total this phone showed, which makes
+// the roll mean "what you just added" rather than replaying from zero.
+const ODO_MIN_DIGITS = 5;
+let odoShown = null;
+
+function buildOdometer(digits) {
+  const el = document.getElementById('odo');
+  el.innerHTML = '';
+  for (let i = 0; i < digits; i++) {
+    const fromRight = digits - i;
+    if (i > 0 && fromRight % 3 === 0) {
+      const sep = document.createElement('span');
+      sep.className = 'odo-sep';
+      sep.textContent = ',';
+      el.appendChild(sep);
+    }
+    const d = document.createElement('div');
+    d.className = 'odo-digit';
+    d.innerHTML = '<div class="odo-strip">'
+      + '0123456789'.split('').map(n => '<span>' + n + '</span>').join('') + '</div>';
+    el.appendChild(d);
+  }
+}
+
+function paintOdometer(value, digits) {
+  const str = String(value).padStart(digits, '0');
+  document.querySelectorAll('#odo .odo-strip').forEach((strip, i) => {
+    strip.style.transform = 'translateY(-' + (Number(str[i]) * 1.3) + 'em)';
+  });
+}
+
+function setOdometer(yards) {
+  yards = Math.max(0, Math.round(yards || 0));
+  if (odoShown === yards) return;
+  let from = odoShown;
+  if (from === null) {
+    try { from = Number(localStorage.getItem('reggie_odo_last')); } catch (e) {}
+    if (!isFinite(from) || from < 0) from = 0;
+    if (from > yards) from = yards; // a removed swim just settles, no backwards roll
+  }
+  const digits = Math.max(ODO_MIN_DIGITS, String(yards).length);
+  const el = document.getElementById('odo');
+  if (el.querySelectorAll('.odo-digit').length !== digits) buildOdometer(digits);
+
+  // Land on the starting value with no animation, then roll to the new one.
+  const strips = el.querySelectorAll('.odo-strip');
+  strips.forEach(s => { s.style.transition = 'none'; });
+  paintOdometer(from, digits);
+  void el.offsetHeight;
+  strips.forEach(s => { s.style.transition = ''; });
+  requestAnimationFrame(() => paintOdometer(yards, digits));
+
+  odoShown = yards;
+  try { localStorage.setItem('reggie_odo_last', String(yards)); } catch (e) {}
+}
+
+// ── Next practice ─────────────────────────────────────────────────────────
+// Registered practices that haven't happened yet are already in the tally, so
+// the soonest one confirms the booking went through without opening anything.
+function renderNextPractice(entries) {
+  const el = document.getElementById('next-practice');
+  const upcoming = (entries || [])
+    .filter(e => !e.is_over && e.date && e.activity !== 'ocean_swim')
+    .sort((a, b) => a.date.localeCompare(b.date) || String(a.time).localeCompare(String(b.time)));
+  if (!upcoming.length) { el.style.display = 'none'; return; }
+  const n = upcoming[0];
+  const [y, m, d] = n.date.split('-').map(Number);
+  const when = new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  el.innerHTML = 'Next: <strong>' + esc([when, n.time].filter(Boolean).join(' · ')) + '</strong> · ' + esc(n.name);
+  el.style.display = '';
 }
 
 // ── Post-practice yardage prompt ──────────────────────────────────────────
