@@ -408,8 +408,8 @@
         </div>
         <div style="width:1px;align-self:stretch;background:#eee"></div>
         <div style="text-align:center;flex:1">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Since</div>
           <div style="font-size:26px;font-weight:800;color:var(--text);line-height:1.1" id="tally-year">—</div>
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:4px" id="tally-year-label">Swimming For</div>
         </div>
       </div>
       <div style="border-top:1px solid #eee;margin-top:12px;padding-top:10px;text-align:center">
@@ -981,11 +981,7 @@ async function refreshTally() {
     document.getElementById('tally-total').textContent = data.total;
     document.getElementById('tally-yards').textContent = nf(data.total_yards);
 
-    // "Past 12 months" reads oddly when the log is a fortnight old. Count from
-    // the first swim instead, and switch to years once there is a year to show.
-    const span = sinceFirstSwim(data.entries);
-    document.getElementById('tally-year').textContent = span.value;
-    document.getElementById('tally-year-label').textContent = span.label;
+    document.getElementById('tally-year').textContent = firstSwimDate(data.entries) || '—';
     card.style.display = 'block';
     renderSharing();
     showNextYardsPrompt();
@@ -1159,14 +1155,14 @@ function renderTally() {
 
   document.getElementById('tally-big').textContent = shown.length;
   document.getElementById('tally-yards-big').textContent = nf(yards);
-  document.getElementById('tally-period-label').textContent = PERIODS[tallyPeriod].label;
+  document.getElementById('tally-period-label').textContent = periodLabel(tallyPeriod);
   document.getElementById('tally-avg').textContent =
     shown.length ? nf(Math.round(yards / shown.length)) + ' yd' : '—';
 
   if (!shown.length) {
     list.innerHTML = '<p style="text-align:center;color:var(--muted);padding:32px 0">'
                    + (d.entries.length
-                       ? 'No practices ' + esc(PERIODS[tallyPeriod].label) + '.'
+                       ? 'No practices ' + esc(periodLabel(tallyPeriod)) + '.'
                        : 'No practices logged yet — register for one and it shows up here.')
                    + '</p>';
     return;
@@ -1248,22 +1244,26 @@ async function undoDelete() {
   renderTally();
 }
 
+// "Sep 2" — the year only once it isn't this year, so it stays short on the card.
+function firstSwimDate(entries) {
+  const dates = (entries || []).map(e => e.date).filter(Boolean).sort();
+  if (!dates.length) return '';
+  const [y, m, d] = dates[0].split('-').map(Number);
+  const first = new Date(y, m - 1, d);
+  const opts = { month: 'short', day: 'numeric' };
+  if (y !== new Date().getFullYear()) opts.year = 'numeric';
+  return first.toLocaleDateString('en-US', opts);
+}
+
+// "All" reads "since Sep 2" once there is a first swim to name.
+function periodLabel(key) {
+  const first = key === 'all' && tallyData && firstSwimDate(tallyData.entries);
+  return first ? 'since ' + first : PERIODS[key].label;
+}
+
 // ── Sharing to Artie ──────────────────────────────────────────────────────
 // Artie's dashboard is team-wide, so this is opt-in and the privacy wording
 // throughout the app follows whatever it's actually set to.
-// Days until that looks silly, then weeks, then months, then years.
-function sinceFirstSwim(entries) {
-  const dates = (entries || []).map(e => e.date).filter(Boolean).sort();
-  if (!dates.length) return { value: '—', label: 'Swimming For' };
-  const first = new Date(dates[0] + 'T12:00:00');
-  // Round, not floor: swimming this morning should read "1 Day In", not zero.
-  const days  = Math.max(1, Math.round((Date.now() - first.getTime()) / 86400000));
-  if (days < 14)  return { value: days, label: days === 1 ? 'Day In' : 'Days In' };
-  if (days < 70)  { const w = Math.round(days / 7);  return { value: w, label: w === 1 ? 'Week In'  : 'Weeks In' }; }
-  if (days < 365) { const m = Math.round(days / 30); return { value: m, label: m === 1 ? 'Month In' : 'Months In' }; }
-  return { value: (days / 365).toFixed(1), label: 'Years In' };
-}
-
 function renderSharing() {
   const s = (tallyData && tallyData.sharing) || { enabled: false, athlete_name: '' };
   const on = !!s.enabled;
