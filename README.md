@@ -3,7 +3,7 @@
 Automated swim practice registration for SCAQ teams on iClassPro.
 
 ## What It Does
-Reggie handles the tedious part of swim team logistics — monitoring available practice slots and auto-registering before they fill up. Built for busy parents who cannot babysit a registration portal.
+Reggie turns SCAQ practice registration on iClassPro into one tap. Sign in once, pick a practice from the open classes, and Reggie completes the registration in the portal for you, promo code included. Built for swimmers who would rather swim than fight a registration page.
 
 ## Live App
 [reggie-production.up.railway.app](https://reggie-production.up.railway.app)
@@ -16,13 +16,15 @@ Reggie handles the tedious part of swim team logistics — monitoring available 
 
 ## Practice Tally
 
-Each swimmer gets a private running count of the practices Reggie registered
-them for, with an estimated yardage per practice (default 3,000, adjustable).
-Once a practice has finished, the app asks for that day's yardage on a slider;
-the home screen shows practices and yards for the past 12 months, and the
-history screen shows the all-time totals.
+Each swimmer gets a running count of the practices Reggie registered them for,
+with an estimated yardage per practice (default 3,000, adjustable). Once a
+practice has finished, the app asks for that day's yardage on a slider. The home
+screen shows total yards on a rolling odometer, with miles and swims since the
+first one; the history screen filters by week, month, year to date or all time.
 
-**A swimmer only ever sees their own numbers. Nothing is shared with the team.**
+**Private by default.** A swimmer can opt in to share confirmed swims with the
+[Artie](https://github.com/R10ForTheWin/artie) crew dashboard; otherwise only
+they see their numbers.
 
 Rows are keyed by `HMAC-SHA256(TALLY_SECRET, lowercased email)` — the table
 stores no email addresses, one swimmer cannot derive another's key without the
