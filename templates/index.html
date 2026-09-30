@@ -21,6 +21,7 @@
       --blue-dark:  #03045E;
       --blue-mid:   #0096C7;
       --blue-light: #00B4D8;
+      --gold:       #FCC700;
       --bg:         #F0F7FF;
       --card:       #ffffff;
       --text:       #1a1a2e;
@@ -255,23 +256,48 @@
       background: #EBF5FF;
     }
 
-    /* ── Home bar ── */
-    /* Booking is the job, so the home header is a slim bar rather than a
-       splash — the button sits where the thumb lands. */
-    .home-bar {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      background: linear-gradient(160deg, var(--blue-dark) 0%, var(--blue) 100%);
+    /* ── Home hero ── */
+    /* Booking is the job, so the hero stays short enough that the button
+       still sits where the thumb lands — but it's the one screen with some
+       ocean in it: Reggie, a greeting, and a wave rolling into the page. */
+    .home-hero {
+      position: relative;
+      background: linear-gradient(165deg, var(--blue-dark) 0%, #023E8A 45%, var(--blue-mid) 100%);
       color: #fff;
-      padding: max(14px, env(safe-area-inset-top, 14px)) 16px 14px;
+      padding: max(14px, env(safe-area-inset-top, 14px)) 16px 44px;
+      overflow: hidden;
     }
-    .home-bar img {
-      width: 40px; height: 40px; flex: 0 0 40px;
+    .home-hero-top { display: flex; align-items: center; justify-content: space-between; }
+    .home-hero-brand { font-size: 15px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.75; }
+    .home-hero-main { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+    .home-hero-main img {
+      width: 68px; height: 68px; flex: 0 0 68px;
       object-fit: cover; border-radius: 50%;
-      border: 2px solid rgba(255,255,255,0.35);
+      border: 3px solid var(--gold);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+      animation: bob 4s ease-in-out infinite;
     }
-    .home-bar h1 { flex: 1; font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+    .home-hero h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; }
+    .home-hero p  { font-size: 15px; opacity: 0.85; margin-top: 4px; }
+    .hero-waves {
+      position: absolute; left: 0; bottom: -1px;
+      width: 200%; height: 34px;
+      animation: roll 9s linear infinite;
+    }
+    .hero-waves.back { opacity: 0.45; height: 42px; animation-duration: 14s; animation-direction: reverse; }
+    @keyframes roll { to { transform: translateX(-50%); } }
+    @keyframes bob  { 50% { transform: translateY(-4px) rotate(-3deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .hero-waves, .home-hero-main img { animation: none; }
+    }
+
+    /* The one gold thing on the page, matching the icon's frame. */
+    .btn-book {
+      background: linear-gradient(180deg, #FFD23F 0%, var(--gold) 100%);
+      color: var(--blue-dark);
+      font-weight: 800;
+      box-shadow: 0 6px 18px rgba(252,199,0,0.35), inset 0 -3px 0 rgba(0,0,0,0.08);
+    }
 
     /* ── Account gear ── */
     /* Login and promo are set once and rarely touched, so they live behind a
@@ -314,17 +340,16 @@
     .odo {
       display: flex; align-items: flex-end; gap: 4px;
       font-family: 'Roboto Mono', ui-monospace, Menlo, monospace;
-      font-size: 34px; font-weight: 500; color: var(--blue-dark);
+      font-size: 34px; font-weight: 500; color: #fff;
     }
     .odo-digit {
       position: relative;
       width: 0.78em; height: 1.3em;
       overflow: hidden;
-      border: 1.5px solid #C9DDF0;
       border-radius: 8px;
-      background: #fff;
-      /* a hint of drum curvature */
-      box-shadow: inset 0 6px 6px -6px rgba(3,4,94,0.18), inset 0 -6px 6px -6px rgba(3,4,94,0.18);
+      background: linear-gradient(180deg, #01023A 0%, var(--blue-dark) 30%, var(--blue-dark) 70%, #01023A 100%);
+      /* drum curvature, plus a sliver of light across the top */
+      box-shadow: inset 0 8px 8px -6px rgba(0,0,0,0.6), inset 0 -8px 8px -6px rgba(0,0,0,0.6), 0 3px 8px rgba(3,4,94,0.25);
     }
     .odo-strip {
       position: absolute; left: 0; right: 0; top: 0;
@@ -332,7 +357,7 @@
       transition: transform 1.4s cubic-bezier(0.22, 1, 0.36, 1);
     }
     .odo-strip span { height: 1.3em; line-height: 1.3em; text-align: center; }
-    .odo-sep { font-size: 0.8em; line-height: 1.3em; color: var(--muted); margin: 0 -1px; }
+    .odo-sep { font-size: 0.8em; line-height: 1.3em; color: var(--blue-dark); margin: 0 -1px; }
     .odo-unit {
       font-size: 13px; font-weight: 600; color: var(--muted);
       text-transform: uppercase; letter-spacing: 0.6px;
@@ -348,6 +373,13 @@
       text-transform: uppercase; letter-spacing: 0.8px;
       margin: 32px 0 8px;
     }
+    .live-dot {
+      display: inline-block; width: 8px; height: 8px; margin-right: 6px;
+      border-radius: 50%; background: var(--error); vertical-align: 1px;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse { 50% { opacity: 0.3; } }
+    .surf-emoji { font-size: 20px; line-height: 1; margin-bottom: 4px; }
     .cam-frame { width: 100%; aspect-ratio: 16 / 9; border: 0; display: block; background: #000; }
 
     /* ── Class list ── */
@@ -467,15 +499,25 @@
 
 <!-- ══════════════════════════════════════════ HOME -->
 <div class="screen" id="screen-home">
-  <div class="home-bar">
-    <img src="/static/reggie.png" alt="">
-    <h1>Reggie</h1>
-    <button class="gear-btn" onclick="openSetup()" aria-label="Account settings">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-      </svg>
-    </button>
+  <div class="home-hero">
+    <div class="home-hero-top">
+      <span class="home-hero-brand">Reggie</span>
+      <button class="gear-btn" onclick="openSetup()" aria-label="Account settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+    <div class="home-hero-main">
+      <img src="/static/reggie.png" alt="">
+      <div>
+        <h1 id="hero-hello">Hey there</h1>
+        <p id="hero-quip">The water's waiting.</p>
+      </div>
+    </div>
+    <svg class="hero-waves back" viewBox="0 0 400 40" preserveAspectRatio="none" aria-hidden="true"><path style="fill:var(--bg)" d="M0 20 Q 25 8 50 20 T 100 20 T 150 20 T 200 20 T 250 20 T 300 20 T 350 20 T 400 20 V 40 H 0 Z"/></svg>
+    <svg class="hero-waves" viewBox="0 0 400 40" preserveAspectRatio="none" aria-hidden="true"><path style="fill:var(--bg)" d="M0 20 Q 25 8 50 20 T 100 20 T 150 20 T 200 20 T 250 20 T 300 20 T 350 20 T 400 20 V 40 H 0 Z"/></svg>
   </div>
   <div class="content">
     <div id="install-banner" style="display:none;background:#EBF5FF;border:1.5px solid var(--blue);border-radius:14px;padding:14px 16px;margin-bottom:16px;position:relative;">
@@ -513,7 +555,7 @@
       <button id="yards-delete" onclick="skipYardsPrompt()" style="display:none;width:100%;margin-top:12px;background:none;border:none;color:var(--muted);font-size:13px;text-decoration:underline;cursor:pointer;padding:6px">Delete this swim</button>
     </div>
 
-    <button class="btn btn-primary btn-lg" onclick="startFindClasses()">Book a Practice</button>
+    <button class="btn btn-book btn-lg" onclick="startFindClasses()">🏊 Book a Practice</button>
     <p class="next-line" id="next-practice" style="display:none"></p>
 
     <div class="odo-wrap" id="tally-card" style="display:none" onclick="openTally()" role="button" tabindex="0"
@@ -527,19 +569,22 @@
       </div>
     </div>
 
-    <div class="section-title">Manhattan Beach · Live</div>
+    <div class="section-title"><span class="live-dot"></span>Manhattan Beach · Live</div>
     <div class="card" style="padding:0;overflow:hidden">
       <iframe class="cam-frame" src="https://www.youtube.com/embed/tBEIYdw1HeM?autoplay=1&mute=1&playsinline=1&rel=0" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen title="Manhattan Beach Cam and Surf Report — live"></iframe>
       <div id="surf-stats" style="display:flex;justify-content:space-around;padding:12px 10px 14px">
         <div style="text-align:center">
+          <div class="surf-emoji" aria-hidden="true">🌡️</div>
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Temp</div>
           <div id="surf-temp" style="font-size:17px;font-weight:700;margin-top:2px">—</div>
         </div>
         <div style="text-align:center">
+          <div class="surf-emoji" aria-hidden="true">🌊</div>
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Wave</div>
           <div id="surf-wave" style="font-size:17px;font-weight:700;margin-top:2px">—</div>
         </div>
         <div style="text-align:center">
+          <div class="surf-emoji" aria-hidden="true">💨</div>
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Wind</div>
           <div id="surf-wind" style="font-size:17px;font-weight:700;margin-top:2px">—</div>
         </div>
@@ -797,6 +842,26 @@ function loadHome() {
   document.getElementById('install-banner').style.display = (!isStandalone && !dismissed) ? 'block' : 'none';
 
   loadSurf();
+  greet();
+}
+
+// A little Reggie on the one screen people see every day. The quip is picked
+// once per day so it doesn't reshuffle every time the app opens.
+const QUIPS = [
+  "The water's waiting.",
+  "Goggles on. Let's go.",
+  "Every yard counts.",
+  "Just keep swimming.",
+  "Nobody regrets a swim.",
+  "Warm-up's the hardest part.",
+  "See you in the lane.",
+];
+function greet() {
+  const h = new Date().getHours();
+  const hello = h < 5 ? 'Up early' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const day = Math.floor(Date.now() / 86400000);
+  document.getElementById('hero-hello').textContent = hello;
+  document.getElementById('hero-quip').textContent  = QUIPS[day % QUIPS.length];
 }
 
 // ── Surf conditions (Manhattan Beach) ────────────────────────────────────
