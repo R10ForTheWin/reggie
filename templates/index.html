@@ -279,6 +279,15 @@
     }
     .home-hero h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; }
     .home-hero p  { font-size: 15px; opacity: 0.85; margin-top: 4px; }
+    /* Added to every header (and as a strip of sea on screens without one)
+       by addWaves() below, so the shape lives in one place. */
+    .header { position: relative; overflow: hidden; padding-bottom: 48px; }
+    .header-sm { padding-bottom: 40px; }
+    .screen.has-sea { position: relative; }
+    .screen.has-sea .center-screen { padding-bottom: 90px; }
+    .sea { position: absolute; left: 0; right: 0; bottom: 0; height: 56px; overflow: hidden; pointer-events: none; }
+    .sea .hero-waves { height: 48px; }
+    .sea .hero-waves.back { height: 56px; }
     .hero-waves {
       position: absolute; left: 0; bottom: -1px;
       width: 200%; height: 34px;
@@ -516,8 +525,6 @@
         <p id="hero-quip">The water's waiting.</p>
       </div>
     </div>
-    <svg class="hero-waves back" viewBox="0 0 400 40" preserveAspectRatio="none" aria-hidden="true"><path style="fill:var(--bg)" d="M0 20 Q 25 8 50 20 T 100 20 T 150 20 T 200 20 T 250 20 T 300 20 T 350 20 T 400 20 V 40 H 0 Z"/></svg>
-    <svg class="hero-waves" viewBox="0 0 400 40" preserveAspectRatio="none" aria-hidden="true"><path style="fill:var(--bg)" d="M0 20 Q 25 8 50 20 T 100 20 T 150 20 T 200 20 T 250 20 T 300 20 T 350 20 T 400 20 V 40 H 0 Z"/></svg>
   </div>
   <div class="content">
     <div id="install-banner" style="display:none;background:#EBF5FF;border:1.5px solid var(--blue);border-radius:14px;padding:14px 16px;margin-bottom:16px;position:relative;">
@@ -763,6 +770,29 @@ function setMembership(type) {
   document.getElementById('label-daily').classList.toggle('active', type === 'daily');
   document.getElementById('promo-group').style.display = (type === 'monthly') ? '' : 'none';
 }
+
+// ── Waves ─────────────────────────────────────────────────────────────────
+// Headers get the page colour rolling up into them; the loading and result
+// screens, which have no header, get a strip of sea along the bottom.
+const WAVE_PATH = 'M0 20 Q 25 8 50 20 T 100 20 T 150 20 T 200 20 T 250 20 T 300 20 T 350 20 T 400 20 V 40 H 0 Z';
+function addWaves(el, fill) {
+  ['back', ''].forEach(layer => {
+    el.insertAdjacentHTML('beforeend',
+      `<svg class="hero-waves ${layer}" viewBox="0 0 400 40" preserveAspectRatio="none" aria-hidden="true">`
+      + `<path style="fill:${fill}" d="${WAVE_PATH}"/></svg>`);
+  });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.home-hero, .header').forEach(h => addWaves(h, 'var(--bg)'));
+  document.querySelectorAll('.screen').forEach(screen => {
+    if (screen.querySelector('.home-hero, .header')) return;
+    screen.classList.add('has-sea');
+    const sea = document.createElement('div');
+    sea.className = 'sea';
+    addWaves(sea, 'var(--blue-mid)');
+    screen.appendChild(sea);
+  });
+});
 
 // ── Dry run toggle ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
