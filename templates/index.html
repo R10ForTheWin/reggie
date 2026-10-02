@@ -219,6 +219,49 @@
       font-family: inherit; font-size: 15px; font-weight: 700;
       cursor: pointer; padding: 4px 6px; flex: 0 0 auto;
     }
+    #undo-bar.show { animation: bar-in 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+    @keyframes bar-in { from { transform: translateY(24px); opacity: 0; } }
+    #undo-check {
+      display: none; flex: 0 0 26px; width: 26px; height: 26px; border-radius: 50%;
+      background: var(--success); color: #fff;
+      align-items: center; justify-content: center; font-size: 15px; font-weight: 800;
+    }
+    #undo-bar.saved #undo-check { display: flex; }
+
+    /* Saving yardage — the button itself reports what happened, the way a
+       payment button does: spinner while the server works, a green check only
+       once the server has said yes. */
+    #yards-save { position: relative; transition: background 0.25s; }
+    #yards-save.saving { opacity: 0.85; pointer-events: none; }
+    #yards-save.saved  { background: var(--success); pointer-events: none; }
+    .btn-spin {
+      display: inline-block; width: 16px; height: 16px; margin-right: 8px; vertical-align: -2px;
+      border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #yards-save.saved .save-label { display: inline-block; animation: pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    @keyframes pop { from { transform: scale(0.6); } }
+    #yards-error { display: none; margin-top: 12px; font-size: 13px; color: var(--error); text-align: center; }
+
+    /* "✓ 3,000 yds logged" rising off the odometer after a save. */
+    .odo-wrap { position: relative; }
+    .odo-delta {
+      position: absolute; left: 50%; top: -26px; transform: translateX(-50%);
+      font-size: 15px; font-weight: 800; color: var(--success); white-space: nowrap;
+      opacity: 0; pointer-events: none;
+    }
+    .odo-delta.go { animation: rise 2.2s ease-out forwards; }
+    @keyframes rise {
+      0%   { opacity: 0; transform: translate(-50%, 10px); }
+      15%  { opacity: 1; transform: translate(-50%, 0); }
+      75%  { opacity: 1; }
+      100% { opacity: 0; transform: translate(-50%, -14px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #undo-bar.show, #yards-save.saved .save-label, .odo-delta.go { animation: none; }
+      .odo-delta.go { opacity: 1; }
+    }
     .btn-lg       { font-size: 19px; padding: 20px; }
 
     /* ── Membership toggle ── */
@@ -556,9 +599,10 @@
              oninput="setYardsDisplay(this.value)" style="width:100%;margin-bottom:14px">
 
       <div style="display:flex;gap:10px">
-        <button class="btn btn-primary" style="flex:1;margin:0" onclick="saveYards()">Save</button>
+        <button class="btn btn-primary" id="yards-save" style="flex:1;margin:0" onclick="saveYards()"><span class="save-label">Save</span></button>
         <button class="btn btn-outline" id="yards-skip" style="flex:0 0 40%;margin:0" onclick="skipYardsPrompt()">Didn't swim</button>
       </div>
+      <div id="yards-error" role="alert"></div>
       <button id="yards-delete" onclick="skipYardsPrompt()" style="display:none;width:100%;margin-top:12px;background:none;border:none;color:var(--muted);font-size:13px;text-decoration:underline;cursor:pointer;padding:6px">Delete this swim</button>
     </div>
 
@@ -567,6 +611,7 @@
 
     <div class="odo-wrap" id="tally-card" style="display:none" onclick="openTally()" role="button" tabindex="0"
          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTally()}">
+      <div class="odo-delta" id="odo-delta" aria-hidden="true"></div>
       <div class="odo-row" id="odo-row" role="img" aria-label="Yards logged">
         <div class="odo" id="odo" aria-hidden="true"></div>
         <span class="odo-unit" aria-hidden="true">yards</span>
@@ -699,9 +744,10 @@
   </div>
 </div>
 
-<div id="undo-bar">
+<div id="undo-bar" role="status" aria-live="polite">
+  <div id="undo-check" aria-hidden="true">✓</div>
   <span id="undo-text">Practice removed</span>
-  <button onclick="undoDelete()">Undo</button>
+  <button id="undo-action" onclick="barAction()">Undo</button>
 </div>
 
 <!-- ══════════════════════════════════════════ ERROR -->
@@ -1326,6 +1372,8 @@ function setYardsMode(mode) {
 }
 
 function openYardsPrompt() {
+  showYardsError('');
+  setSaveState(null);
   document.getElementById('yards-prompt').style.display = 'block';
   const home = document.getElementById('screen-home');
   if (home) home.classList.add('focus-yards');
@@ -1341,19 +1389,67 @@ function nudgeYards(delta) {
   setYardsDisplay(Number(document.getElementById('yards-slider').value) + delta);
 }
 
+// The card only goes away once the server has written the number down. A
+// failure keeps the card open with the number still on it, so nothing is lost
+// and "Saved" never appears for a save that didn't happen.
+function setSaveState(state) {
+  const btn = document.getElementById('yards-save');
+  btn.classList.remove('saving', 'saved');
+  if (state) btn.classList.add(state);
+  btn.innerHTML = state === 'saving' ? '<span class="btn-spin"></span><span class="save-label">Saving…</span>'
+                : state === 'saved'  ? '<span class="save-label">✓ Saved</span>'
+                :                      '<span class="save-label">Save</span>';
+}
+
+function showYardsError(msg) {
+  const el = document.getElementById('yards-error');
+  el.textContent = msg || '';
+  el.style.display = msg ? 'block' : 'none';
+}
+
 async function saveYards() {
   if (!promptEntry) return;
-  const id    = promptEntry.id;
+  const entry = promptEntry;
   const yards = Number(document.getElementById('yards-slider').value);
-  hideYardsPrompt();
+  showYardsError('');
+  setSaveState('saving');
+  let ok = false;
   try {
-    await fetch('/api/attendance/' + id + '/yards', {
+    const res  = await fetch('/api/attendance/' + entry.id + '/yards', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ key: getTallyKey(), yards }),
     });
-  } catch (err) { /* next refresh re-prompts */ }
+    const data = await res.json().catch(() => ({}));
+    ok = res.ok && data.ok;
+  } catch (err) { /* offline — handled below */ }
+
+  if (!ok) {
+    setSaveState(null);
+    showYardsError(navigator.onLine === false
+      ? "You're offline — not saved yet. Tap Save again once you're connected."
+      : "Couldn't save that — nothing changed. Tap Save to try again.");
+    return;
+  }
+
+  setSaveState('saved');
+  if (navigator.vibrate) navigator.vibrate(12);
+  await new Promise(r => setTimeout(r, 650));
+  hideYardsPrompt();
+  setSaveState(null);
   await refreshTally();
+  showOdoBadge(yards);
+  showSaved(nf(yards) + ' yards saved · ' + [entry.label, entry.time].filter(Boolean).join(' · '), entry.id);
+}
+
+// The total already counts an unconfirmed swim at the default, so the roll
+// alone can be zero — the badge names the swim's own number instead.
+function showOdoBadge(yards) {
+  const el = document.getElementById('odo-delta');
+  el.textContent = '✓ ' + nf(yards) + ' yds logged';
+  el.classList.remove('go');
+  void el.offsetWidth;
+  el.classList.add('go');
 }
 
 // "Didn't swim" removes the practice rather than logging zero yards, so the
@@ -1477,14 +1573,28 @@ function renderTally() {
 
 // ── Delete, with undo ─────────────────────────────────────────────────────
 // Deletes are soft on the server, so an accidental tap is always recoverable.
+// The same bar confirms a saved yardage, with Edit in place of Undo.
 let lastDeletedId = null;
 let undoTimer     = null;
+let barAction     = undoDelete;
 
-function showUndo(name) {
-  document.getElementById('undo-text').textContent = 'Removed ' + (name || 'practice');
-  document.getElementById('undo-bar').classList.add('show');
+function showBar(text, actionLabel, action, saved) {
+  const bar = document.getElementById('undo-bar');
+  document.getElementById('undo-text').textContent = text;
+  document.getElementById('undo-action').textContent = actionLabel;
+  barAction = action;
+  bar.classList.toggle('saved', !!saved);
+  bar.classList.remove('show');
+  void bar.offsetWidth;
+  bar.classList.add('show');
   clearTimeout(undoTimer);
-  undoTimer = setTimeout(hideUndo, 8000);
+  undoTimer = setTimeout(hideUndo, saved ? 5000 : 8000);
+}
+function showUndo(name) {
+  showBar('Removed ' + (name || 'practice'), 'Undo', undoDelete, false);
+}
+function showSaved(text, id) {
+  showBar(text, 'Edit', () => { hideUndo(); editYards(id); }, true);
 }
 function hideUndo() {
   clearTimeout(undoTimer);
