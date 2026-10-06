@@ -1318,7 +1318,10 @@ function renderNextPractice(entries) {
   const n = upcoming[0];
   const [y, m, d] = n.date.split('-').map(Number);
   const when = new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  el.innerHTML = 'Next: <strong>' + esc([when, n.time].filter(Boolean).join(' · ')) + '</strong> · ' + esc(n.name);
+  // iClassPro names carry their own day and time ("El Segundo: Monday 10/05 at
+  // 5:45am"); the bold part already says that, so keep just the place.
+  const place = String(n.name || '').replace(/:\s*\w+day\s+\d{1,2}\/\d{1,2}.*$/i, '');
+  el.innerHTML = 'Next: <strong>' + esc([when, n.time].filter(Boolean).join(' · ')) + '</strong> · ' + esc(place);
   el.style.display = '';
 }
 

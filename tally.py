@@ -583,7 +583,8 @@ def list_practices(key, limit=2000):
             "name":      name or "Practice",
             "date":      cdate.isoformat() if cdate else None,
             "label":     cdate.strftime("%a %b %-d, %Y") if cdate else "",
-            "time":      starts_at.strftime("%-I:%M %p").lower() if starts_at else "",
+            # Postgres hands timestamptz back in UTC; show the pool's own clock.
+            "time":      starts_at.astimezone(_tz()).strftime("%-I:%M %p").lower() if starts_at else "",
             "yards":     yards,
             "confirmed": bool(confirmed),
             "is_over":   is_over,
