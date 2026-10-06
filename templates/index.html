@@ -433,6 +433,8 @@
     }
     @keyframes pulse { 50% { opacity: 0.3; } }
     .surf-emoji { font-size: 20px; line-height: 1; margin-bottom: 4px; }
+    /* Four readings share a phone's width evenly. */
+    #surf-stats > div { flex: 1 1 0; min-width: 0; }
     .cam-frame { width: 100%; aspect-ratio: 16 / 9; border: 0; display: block; background: #000; }
 
     /* ── Class list ── */
@@ -625,11 +627,16 @@
     <div class="section-title"><span class="live-dot"></span>Manhattan Beach · Live</div>
     <div class="card" style="padding:0;overflow:hidden">
       <iframe class="cam-frame" src="https://www.youtube.com/embed/tBEIYdw1HeM?autoplay=1&mute=1&playsinline=1&rel=0" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen title="Manhattan Beach Cam and Surf Report — live"></iframe>
-      <div id="surf-stats" style="display:flex;justify-content:space-around;padding:12px 10px 14px">
+      <div id="surf-stats" style="display:flex;justify-content:space-around;padding:12px 6px 14px">
         <div style="text-align:center">
           <div class="surf-emoji" aria-hidden="true">🌡️</div>
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Ocean Temp</div>
           <div id="surf-temp" style="font-size:17px;font-weight:700;margin-top:2px">—</div>
+        </div>
+        <div style="text-align:center">
+          <div class="surf-emoji" aria-hidden="true">☀️</div>
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Air Temp</div>
+          <div id="surf-air" style="font-size:17px;font-weight:700;margin-top:2px">—</div>
         </div>
         <div style="text-align:center">
           <div class="surf-emoji" aria-hidden="true">🌊</div>
@@ -950,6 +957,7 @@ function loadSurf() {
     .then(r => r.json())
     .then(d => {
       document.getElementById('surf-temp').textContent = d.temp_f != null ? d.temp_f + '°F' : '—';
+      document.getElementById('surf-air').textContent  = d.air_f  != null ? d.air_f  + '°F' : '—';
       document.getElementById('surf-wave').textContent = d.wave_ft != null ? d.wave_ft + 'ft' : '—';
       document.getElementById('surf-wind').textContent = (d.wind_mph != null && d.wind_dir)
         ? d.wind_mph + 'mph ' + d.wind_dir

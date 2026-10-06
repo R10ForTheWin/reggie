@@ -53,7 +53,7 @@ def _fetch_url(url, timeout=6):
 
 
 def _fetch_surf_data():
-    result = {"temp_f": None, "wave_ft": None, "wind_mph": None, "wind_dir": None, "wind_state": None}
+    result = {"temp_f": None, "air_f": None, "wave_ft": None, "wind_mph": None, "wind_dir": None, "wind_state": None}
 
     try:
         text = _fetch_url("https://www.ndbc.noaa.gov/data/realtime2/46222.txt")
@@ -84,10 +84,13 @@ def _fetch_surf_data():
         meteo_url = (
             "https://api.open-meteo.com/v1/forecast"
             f"?latitude={_MB_LAT}&longitude={_MB_LON}"
-            "&current=wind_speed_10m,wind_direction_10m"
-            "&wind_speed_unit=mph&timezone=America%2FLos_Angeles"
+            "&current=wind_speed_10m,wind_direction_10m,temperature_2m"
+            "&wind_speed_unit=mph&temperature_unit=fahrenheit&timezone=America%2FLos_Angeles"
         )
         cur   = json.loads(_fetch_url(meteo_url)).get("current", {})
+        # The buoy is wave-only and rarely reports air, so air comes from here.
+        if cur.get("temperature_2m") is not None:
+            result["air_f"] = round(cur["temperature_2m"])
         speed = cur.get("wind_speed_10m")
         deg   = cur.get("wind_direction_10m")
         if speed is not None and deg is not None:
