@@ -378,6 +378,7 @@
       margin-top: 12px;
     }
     .next-line strong { color: var(--text); font-weight: 600; }
+    .next-line .booked { color: var(--success); font-weight: 700; }
 
     /* ── Yardage odometer ── */
     /* Yardage is the feature worth showing off, but it must not outweigh the
@@ -1321,7 +1322,10 @@ function renderNextPractice(entries) {
   // iClassPro names carry their own day and time ("El Segundo: Monday 10/05 at
   // 5:45am"); the bold part already says that, so keep just the place.
   const place = String(n.name || '').replace(/:\s*\w+day\s+\d{1,2}\/\d{1,2}.*$/i, '');
-  el.innerHTML = 'Next: <strong>' + esc([when, n.time].filter(Boolean).join(' · ')) + '</strong> · ' + esc(place);
+  // "You're booked", not "Next" — this is your registration, not SCAQ's schedule.
+  const more = upcoming.length > 1 ? ' · +' + (upcoming.length - 1) + ' more' : '';
+  el.innerHTML = '<span class="booked">✓ You\'re booked</span> · <strong>'
+    + esc([when, n.time].filter(Boolean).join(' · ')) + '</strong> · ' + esc(place) + more;
   el.style.display = '';
 }
 
