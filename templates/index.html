@@ -31,6 +31,10 @@
       --radius:     16px;
     }
 
+    /* Rapid taps on a button shouldn't read as a double-tap zoom on iOS.
+       Pinch-to-zoom still works. */
+    button, a, input, label, .card { touch-action: manipulation; }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: var(--bg);
