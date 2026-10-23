@@ -33,7 +33,7 @@
 
     /* Rapid taps on a button shouldn't read as a double-tap zoom on iOS.
        Pinch-to-zoom still works. */
-    button, a, input, label, .card { touch-action: manipulation; }
+    html, button, a, input, label, .card { touch-action: manipulation; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -163,9 +163,34 @@
       background: transparent; color: var(--blue);
       font-size: 24px; font-weight: 700; line-height: 1;
       cursor: pointer; -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none; user-select: none;
     }
     .yard-step:active { background: var(--blue); color: #fff; }
-    #yards-slider { accent-color: var(--blue); height: 28px; }
+    /* Double-tapping near the number shouldn't select it either. */
+    #yards-stepper { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    /* The native iOS slider is white on a white card — draw our own: a pale
+       track filled blue up to the value, and a solid blue thumb. */
+    #yards-slider {
+      -webkit-appearance: none; appearance: none;
+      height: 28px; background: transparent; --fill: 30%;
+    }
+    #yards-slider::-webkit-slider-runnable-track {
+      height: 8px; border-radius: 4px;
+      background: linear-gradient(to right, var(--blue) var(--fill), #CFE3F5 var(--fill));
+    }
+    #yards-slider::-moz-range-track { height: 8px; border-radius: 4px; background: #CFE3F5; }
+    #yards-slider::-moz-range-progress { height: 8px; border-radius: 4px; background: var(--blue); }
+    #yards-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 28px; height: 28px; margin-top: -10px; border-radius: 50%;
+      background: var(--blue); border: 3px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+    #yards-slider::-moz-range-thumb {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--blue); border: 3px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
     /* Setting yardage is a single decision — hide the rest of the home screen
        so the webcam and pool list are not competing for the same tap. */
     #screen-home.focus-yards .content > *:not(#yards-prompt) { display: none !important; }
@@ -593,7 +618,7 @@
       <div style="font-size:13px;color:var(--muted);margin-bottom:14px" id="yards-prompt-when"></div>
       <div id="yards-backlog" style="display:none;font-size:12px;color:var(--muted);margin:-8px 0 12px"></div>
 
-      <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:10px">
+      <div id="yards-stepper" style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:10px">
         <button class="yard-step" onclick="nudgeYards(-100)" aria-label="Less yardage">−</button>
         <div style="text-align:center;min-width:120px">
           <div style="font-size:34px;font-weight:800;color:var(--text);line-height:1" id="yards-value">3000</div>
@@ -1407,12 +1432,24 @@ function openYardsPrompt() {
 function setYardsDisplay(value) {
   const n = Math.max(0, Math.min(10000, Math.round(Number(value) / 100) * 100));
   document.getElementById('yards-value').textContent  = nf(n);
-  document.getElementById('yards-slider').value       = n;
+  const slider = document.getElementById('yards-slider');
+  slider.value = n;
+  slider.style.setProperty('--fill', (n / 100) + '%');
 }
 
 function nudgeYards(delta) {
   setYardsDisplay(Number(document.getElementById('yards-slider').value) + delta);
 }
+
+// iOS still treats two quick taps on the stepper as a double-tap zoom despite
+// touch-action. Handling the tap on touchend and cancelling it means Safari
+// never sees a tap at all — no zoom, and no delayed click firing a second nudge.
+document.querySelectorAll('.yard-step').forEach(btn => {
+  btn.addEventListener('touchend', e => {
+    e.preventDefault();
+    btn.click();
+  });
+});
 
 // The card only goes away once the server has written the number down. A
 // failure keeps the card open with the number still on it, so nothing is lost
