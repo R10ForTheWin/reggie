@@ -519,6 +519,12 @@
     .result-title { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
     .result-msg   { font-size: 16px; color: var(--muted); margin-bottom: 32px; max-width: 300px; }
     .result-btn   { width: 200px; }
+    /* The video shrinks to leave room for the text and both buttons, so the
+       whole success screen fits on a phone without scrolling. */
+    #success-video {
+      display: block; width: auto; height: auto; max-width: 100%;
+      max-height: max(200px, calc(100svh - 480px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+    }
 
     .error-inline { color: var(--error); font-size: 14px; margin-top: 10px; text-align: center; }
     .note         { text-align: center; font-size: 13px; color: var(--muted); margin-top: 14px; }
@@ -736,8 +742,8 @@
 <!-- ══════════════════════════════════════════ SUCCESS -->
 <div class="screen" id="screen-success">
   <div class="center-screen">
-    <div id="success-video-wrap" style="display:none;width:100%;max-width:360px;margin-bottom:20px;border-radius:16px;overflow:hidden;">
-      <video id="success-video" src="/static/success.mp4" autoplay muted playsinline preload="auto" style="width:100%;display:block;"></video>
+    <div id="success-video-wrap" style="display:none;width:fit-content;max-width:min(100%,360px);margin-bottom:20px;border-radius:16px;overflow:hidden;">
+      <video id="success-video" src="/static/success.mp4" autoplay muted playsinline preload="auto"></video>
     </div>
     <div class="result-icon" id="success-icon">✅</div>
     <div class="result-title">You're In!</div>
